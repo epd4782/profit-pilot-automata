@@ -1,8 +1,9 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { WalletIcon, PlayIcon, SquareIcon, SettingsIcon, TrendingUpIcon } from 'lucide-react';
+import { WalletIcon, PlayIcon, SquareIcon, SettingsIcon, TrendingUpIcon, WifiIcon } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface DashboardHeaderProps {
   isRunning: boolean;
@@ -12,6 +13,34 @@ interface DashboardHeaderProps {
 export const DashboardHeader = ({ isRunning, onToggleBot }: DashboardHeaderProps) => {
   const { toast } = useToast();
   const [isTogglingBot, setIsTogglingBot] = useState(false);
+  const [apiStatus, setApiStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
+
+  // Simulate API status check
+  useEffect(() => {
+    const checkApiStatus = async () => {
+      try {
+        // In a real implementation, this would be an actual API check
+        const apiConfigured = localStorage.getItem("binance_api_key") && 
+                              localStorage.getItem("binance_secret_key");
+        
+        if (apiConfigured) {
+          setApiStatus('connected');
+        } else {
+          setApiStatus('disconnected');
+        }
+      } catch (error) {
+        setApiStatus('error');
+      }
+    };
+
+    // Initial check
+    checkApiStatus();
+
+    // Set up periodic check every 30 seconds
+    const interval = setInterval(checkApiStatus, 30000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const handleToggleBot = async () => {
     setIsTogglingBot(true);
@@ -35,6 +64,24 @@ export const DashboardHeader = ({ isRunning, onToggleBot }: DashboardHeaderProps
     }
   };
 
+  const getApiStatusColor = () => {
+    switch (apiStatus) {
+      case 'connected': return 'bg-success-DEFAULT';
+      case 'disconnected': return 'bg-warning-DEFAULT';
+      case 'error': return 'bg-danger-DEFAULT';
+      default: return 'bg-muted-foreground';
+    }
+  };
+
+  const getApiStatusText = () => {
+    switch (apiStatus) {
+      case 'connected': return 'API verbunden';
+      case 'disconnected': return 'API nicht verbunden';
+      case 'error': return 'API Fehler';
+      default: return 'API Status unbekannt';
+    }
+  };
+
   return (
     <div className="flex justify-between items-center mb-6 pt-4 pb-2">
       <div className="flex items-center gap-2">
@@ -43,6 +90,25 @@ export const DashboardHeader = ({ isRunning, onToggleBot }: DashboardHeaderProps
       </div>
 
       <div className="flex items-center gap-4">
+        {/* API Status Indicator */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-1.5">
+              <div className={`h-2.5 w-2.5 rounded-full ${getApiStatusColor()} ${apiStatus === 'connected' ? 'animate-pulse-slow' : ''}`} />
+              <span className="text-sm font-medium">
+                {getApiStatusText()}
+              </span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            <div className="flex items-center gap-2">
+              <WifiIcon className="h-4 w-4" />
+              <p>Letzte API-Prüfung: {new Date().toLocaleTimeString()}</p>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Bot Status Indicator */}
         <div className="flex items-center gap-1.5">
           <div className={`h-2.5 w-2.5 rounded-full ${isRunning ? 'bg-success-DEFAULT animate-pulse-slow' : 'bg-danger-DEFAULT'}`} />
           <span className="text-sm font-medium">
