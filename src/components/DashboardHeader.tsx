@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { WalletIcon, PlayIcon, StopIcon, SettingsIcon, TrendingUpIcon } from 'lucide-react';
+import { WalletIcon, PlayIcon, SquareIcon, SettingsIcon, TrendingUpIcon } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 interface DashboardHeaderProps {
@@ -60,7 +60,7 @@ export const DashboardHeader = ({ isRunning, onToggleBot }: DashboardHeaderProps
           >
             {isRunning ? (
               <>
-                <StopIcon className="h-4 w-4 text-danger-DEFAULT" />
+                <SquareIcon className="h-4 w-4 text-danger-DEFAULT" />
                 <span>Stop</span>
               </>
             ) : (
