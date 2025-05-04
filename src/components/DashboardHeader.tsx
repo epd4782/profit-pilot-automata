@@ -31,18 +31,14 @@ export const DashboardHeader = () => {
     setIsTogglingBot(true);
     try {
       await toggleBot();
-      toast({
-        title: isRunning ? "Bot gestoppt" : "Bot gestartet",
+      toast.success(isRunning ? "Bot gestoppt" : "Bot gestartet", {
         description: isRunning 
           ? "Der Trading-Bot wurde erfolgreich gestoppt." 
-          : "Der Trading-Bot wurde erfolgreich gestartet.",
-        variant: isRunning ? "destructive" : "default",
+          : "Der Trading-Bot wurde erfolgreich gestartet."
       });
     } catch (error) {
-      toast({
-        title: "Fehler",
-        description: `Beim ${isRunning ? "Stoppen" : "Starten"} des Bots ist ein Fehler aufgetreten.`,
-        variant: "destructive",
+      toast.error("Fehler", {
+        description: `Beim ${isRunning ? "Stoppen" : "Starten"} des Bots ist ein Fehler aufgetreten.`
       });
     } finally {
       setIsTogglingBot(false);
