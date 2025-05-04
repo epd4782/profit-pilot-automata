@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowDownIcon, ArrowUpIcon, CoinIcon, WalletIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, CoinsIcon, WalletIcon } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
 interface WalletModalProps {
@@ -102,7 +102,7 @@ export const WalletModal = ({ isOpen, onOpenChange }: WalletModalProps) => {
                     >
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 rounded-full bg-trading-border flex items-center justify-center">
-                          <CoinIcon className="h-5 w-5" />
+                          <CoinsIcon className="h-5 w-5" />
                         </div>
                         <div>
                           <div className="font-medium">{balance.asset}</div>

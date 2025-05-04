@@ -1,11 +1,12 @@
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, TooltipProps
 } from 'recharts';
-import { mockPerformanceData } from '@/lib/mock-data';
+import { useTradingContext } from '@/contexts/TradingContext';
+import { EquityPoint } from '@/models/trade';
 
 interface CustomTooltipProps extends TooltipProps<number, string> {
   active?: boolean;
@@ -17,9 +18,11 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-trading-card border border-trading-border rounded-md px-3 py-2 shadow-md">
-        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-xs text-muted-foreground">
+          {new Date(parseInt(label)).toLocaleString()}
+        </p>
         <p className="font-medium text-sm">
-          {payload[0].value.toFixed(2)} <span className="text-xs">€</span>
+          {payload[0].value.toFixed(2)} <span className="text-xs">USDT</span>
         </p>
       </div>
     );
@@ -28,33 +31,46 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
 };
 
 export const PerformanceChart = () => {
-  const [chartData, setChartData] = useState(mockPerformanceData.daily);
   const [selectedPeriod, setSelectedPeriod] = useState('daily');
-
+  const { equityData } = useTradingContext();
+  
   const handlePeriodChange = (period: string) => {
     setSelectedPeriod(period);
-    switch (period) {
-      case 'daily':
-        setChartData(mockPerformanceData.daily);
-        break;
-      case 'weekly':
-        setChartData(mockPerformanceData.weekly);
-        break;
-      case 'monthly':
-        setChartData(mockPerformanceData.monthly);
-        break;
-      case 'yearly':
-        setChartData(mockPerformanceData.yearly);
-        break;
-      default:
-        setChartData(mockPerformanceData.daily);
-    }
   };
+
+  const formatChartData = (data: EquityPoint[]) => {
+    return data.map(point => ({
+      time: point.timestamp,
+      value: point.value
+    }));
+  };
+  
+  const chartData = formatChartData(
+    selectedPeriod === 'daily' 
+      ? equityData.daily 
+      : selectedPeriod === 'weekly'
+      ? equityData.weekly
+      : selectedPeriod === 'monthly'
+      ? equityData.monthly
+      : equityData.yearly
+  );
 
   // Calculate min and max for chart domain
   const dataValues = chartData.map(item => item.value);
-  const minValue = Math.min(...dataValues) * 0.9;
-  const maxValue = Math.max(...dataValues) * 1.1;
+  const minValue = Math.min(...dataValues) * 0.99;
+  const maxValue = Math.max(...dataValues) * 1.01;
+  
+  // Format date for x-axis
+  const formatXAxis = (timestamp: number) => {
+    const date = new Date(timestamp);
+    if (selectedPeriod === 'daily') {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (selectedPeriod === 'weekly') {
+      return `${date.getDate()}.${date.getMonth() + 1}`;
+    } else {
+      return `${date.getDate()}.${date.getMonth() + 1}`;
+    }
+  };
 
   return (
     <Card className="trading-card">
@@ -90,6 +106,7 @@ export const PerformanceChart = () => {
                 axisLine={false}
                 tickLine={false}
                 tick={{ fontSize: 10, fill: '#94a3b8' }}
+                tickFormatter={formatXAxis}
               />
               <YAxis 
                 domain={[minValue, maxValue]}

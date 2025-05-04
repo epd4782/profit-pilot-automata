@@ -6,40 +6,18 @@ import { StatCard } from "@/components/StatCard";
 import { RecentTradesTable } from "@/components/RecentTradesTable";
 import { StrategySelector } from "@/components/StrategySelector";
 import { ApiKeyForm } from "@/components/ApiKeyForm";
+import { TradingProvider, useTradingContext } from "@/contexts/TradingContext";
 
-const Dashboard = () => {
-  const [isRunning, setIsRunning] = useState(false);
+const DashboardContent = () => {
+  const { isLoading, totalBalance, profit, tradeStats } = useTradingContext();
   const [apiConfigured, setApiConfigured] = useState(false);
-  const [balance, setBalance] = useState(0);
-  const [profit, setProfit] = useState(0);
-  const [profitPercent, setProfitPercent] = useState(0);
-  const [trades, setTrades] = useState(0);
   
-  // Prüfe, ob API-Schlüssel konfiguriert sind
+  // Check if API keys are configured
   useEffect(() => {
     const apiKey = localStorage.getItem("binance_api_key");
     const secretKey = localStorage.getItem("binance_secret_key");
-    
-    if (apiKey && secretKey) {
-      setApiConfigured(true);
-      // Simuliere Ladeprozess von Binance-Daten
-      setTimeout(() => {
-        setBalance(125.48);
-        setProfit(7.92);
-        setProfitPercent(6.74);
-        setTrades(13);
-      }, 1000);
-    }
+    setApiConfigured(!!apiKey && !!secretKey);
   }, []);
-  
-  const handleToggleBot = async () => {
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        setIsRunning(!isRunning);
-        resolve();
-      }, 1000);
-    });
-  };
   
   const handleApiKeySaved = (apiKey: string, secretKey: string) => {
     setApiConfigured(!!apiKey && !!secretKey);
@@ -48,25 +26,31 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen bg-trading-dark">
       <div className="container px-4 lg:px-8 mx-auto">
-        <DashboardHeader isRunning={isRunning} onToggleBot={handleToggleBot} />
+        <DashboardHeader />
         
         {apiConfigured ? (
           <>
             {/* Stats Row */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-              <StatCard title="Kontostand" value={`${balance.toFixed(2)} €`} />
+              <StatCard 
+                title="Kontostand" 
+                value={`${isLoading ? '...' : totalBalance.toFixed(2)} USDT`}
+              />
               <StatCard 
                 title="Gesamtgewinn" 
-                value={`${profit.toFixed(2)} €`} 
-                change={profitPercent} 
+                value={`${isLoading ? '...' : profit.total.toFixed(2)} USDT`} 
+                change={profit.total > 0 ? (profit.total / totalBalance) * 100 : 0} 
                 changeTimeframe="Gesamt"
               />
-              <StatCard title="Anzahl Trades" value={trades} />
+              <StatCard 
+                title="Anzahl Trades" 
+                value={isLoading ? '...' : tradeStats.total}
+              />
               <StatCard 
                 title="Win-Rate" 
-                value="61.5%" 
-                change={3.8} 
-                changeTimeframe="7T"
+                value={isLoading ? '...' : `${(tradeStats.winRate * 100).toFixed(1)}%`} 
+                change={tradeStats.winRate > 0.5 ? ((tradeStats.winRate - 0.5) * 100) : ((0.5 - tradeStats.winRate) * -100)} 
+                changeTimeframe="Gesamt"
               />
             </div>
             
@@ -94,6 +78,14 @@ const Dashboard = () => {
         )}
       </div>
     </div>
+  );
+};
+
+const Dashboard = () => {
+  return (
+    <TradingProvider>
+      <DashboardContent />
+    </TradingProvider>
   );
 };
 

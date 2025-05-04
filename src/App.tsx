@@ -8,6 +8,9 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 
+// Add tailwind helper class for pulse animation
+import "./App.css";
+
 const queryClient = new QueryClient();
 
 const App = () => (

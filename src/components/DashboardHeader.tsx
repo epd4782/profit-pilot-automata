@@ -1,55 +1,36 @@
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { WalletIcon, PlayIcon, SquareIcon, SettingsIcon, TrendingUpIcon, WifiIcon } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SettingsModal } from './SettingsModal';
 import { WalletModal } from './WalletModal';
+import { useTradingContext } from '@/contexts/TradingContext';
 
-interface DashboardHeaderProps {
-  isRunning: boolean;
-  onToggleBot: () => void;
-}
-
-export const DashboardHeader = ({ isRunning, onToggleBot }: DashboardHeaderProps) => {
-  const { toast } = useToast();
+export const DashboardHeader = () => {
+  const { isRunning, toggleBot, isLoading } = useTradingContext();
   const [isTogglingBot, setIsTogglingBot] = useState(false);
   const [apiStatus, setApiStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
 
-  // Simulate API status check
-  useEffect(() => {
-    const checkApiStatus = async () => {
-      try {
-        // In a real implementation, this would be an actual API check
-        const apiConfigured = localStorage.getItem("binance_api_key") && 
-                              localStorage.getItem("binance_secret_key");
-        
-        if (apiConfigured) {
-          setApiStatus('connected');
-        } else {
-          setApiStatus('disconnected');
-        }
-      } catch (error) {
-        setApiStatus('error');
-      }
-    };
-
-    // Initial check
-    checkApiStatus();
-
-    // Set up periodic check every 30 seconds
-    const interval = setInterval(checkApiStatus, 30000);
-    
-    return () => clearInterval(interval);
-  }, []);
+  // API status check handled by the useEffect directly in TradingContext
+  // Here we just visualize it based on the context values
+  const apiConfigured = !!localStorage.getItem("binance_api_key") && 
+                         !!localStorage.getItem("binance_secret_key");
+  
+  // Set API status based on configuration
+  if (apiConfigured && apiStatus !== 'connected') {
+    setApiStatus('connected');
+  } else if (!apiConfigured && apiStatus !== 'disconnected') {
+    setApiStatus('disconnected');
+  }
 
   const handleToggleBot = async () => {
     setIsTogglingBot(true);
     try {
-      await onToggleBot();
+      await toggleBot();
       toast({
         title: isRunning ? "Bot gestoppt" : "Bot gestartet",
         description: isRunning 
@@ -127,7 +108,7 @@ export const DashboardHeader = ({ isRunning, onToggleBot }: DashboardHeaderProps
               size="sm"
               className="gap-1.5"
               onClick={handleToggleBot}
-              disabled={isTogglingBot}
+              disabled={isTogglingBot || isLoading}
             >
               {isRunning ? (
                 <>
