@@ -1,553 +1,432 @@
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardHeader, 
+  CardTitle 
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
-import { PlusIcon, FileIcon, UploadIcon, SaveIcon, Trash2Icon, FilePenIcon } from "lucide-react";
-import { StrategySchema, StrategyTemplate } from "@/models/trade";
-import { useTradingContext } from "@/contexts/TradingContext";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { UploadIcon, PlusIcon, CheckCircle2Icon, CircleAlertIcon } from "lucide-react";
 import { toast } from "sonner";
+import { strategyService, StrategySettings } from "@/services/strategyService";
+import { StrategySchema, StrategyTemplate } from "@/models/trade";
 
-// Sample strategy templates
-const strategyTemplates: StrategyTemplate[] = [
+const defaultTemplates: StrategyTemplate[] = [
   {
-    id: "rsi-ema-cross",
-    name: "RSI + EMA Cross",
+    id: "template_rsi_ema",
+    name: "RSI + EMA Crossover",
     description: "Kombiniert RSI-Überkauf/Überverkauf mit EMA-Kreuzungen für Trendbestätigung.",
     schema: {
+      name: "RSI + EMA Cross",
+      description: "Kombiniert RSI-Überkauf/Überverkauf mit EMA-Kreuzungen für Trendbestätigung.",
+      version: "1.0",
+      symbols: ["BTCUSDT", "ETHUSDT"],
+      timeframes: ["15m", "1h"],
+      riskPerTrade: 1.0,
+      maxDailyLoss: 5.0,
+      maxTradesPerDay: 10,
+      stopLoss: 2.0,
+      takeProfit: 4.0,
+      trailingStop: true,
+      trailingStopDistance: 1.0,
+      trailingTakeProfit: false,
       indicators: {
-        rsi: {
-          type: "RSI",
-          parameters: {
-            period: 14,
-            overbought: 70,
-            oversold: 30
-          },
-          conditions: [
-            {
-              type: "BELOW",
-              value: 30
-            }
-          ]
-        },
-        emaShort: {
-          type: "EMA",
-          parameters: {
-            period: 9
-          },
-          conditions: [
-            {
-              type: "CROSSOVER",
-              compareTo: "emaLong"
-            }
-          ]
-        },
-        emaLong: {
-          type: "EMA",
-          parameters: {
-            period: 21
-          }
+        type: "RSI_EMA",
+        parameters: {
+          rsiPeriod: 14,
+          rsiOverbought: 70,
+          rsiOversold: 30,
+          emaShortPeriod: 9,
+          emaLongPeriod: 21,
+          useVolume: true,
+          volumeThreshold: 1.5
         }
-      },
-      entryRules: [
-        "RSI unter 30 (überverkauft)",
-        "Kurzer EMA kreuzt langen EMA von unten nach oben",
-        "Preis ist über kurzem EMA"
-      ],
-      exitRules: [
-        "Take Profit erreicht",
-        "Stop Loss erreicht",
-        "RSI über 70 (überkauft)",
-        "Kurzer EMA kreuzt langen EMA von oben nach unten"
-      ]
+      }
     }
   },
   {
-    id: "macd-bb-volume",
-    name: "MACD + Bollinger + Volumen",
-    description: "MACD-Signale mit Bollinger Bands und Volumenbestätigung für starke Trendwenden.",
+    id: "template_bollinger_macd",
+    name: "Bollinger + MACD",
+    description: "Nutzt Bollinger Bands für Volatilität und MACD für Trendbestätigung.",
     schema: {
+      name: "Bollinger + MACD",
+      description: "Nutzt Bollinger Bands für Volatilität und MACD für Trendbestätigung.",
+      version: "1.0",
+      symbols: ["BTCUSDT", "BNBUSDT"],
+      timeframes: ["5m", "15m"],
+      riskPerTrade: 1.5,
+      maxDailyLoss: 6.0,
+      maxTradesPerDay: 15,
+      stopLoss: 1.5,
+      takeProfit: 3.0,
+      trailingStop: true,
+      trailingStopDistance: 0.8,
+      trailingTakeProfit: true,
+      trailingTakeProfitDistance: 0.5,
       indicators: {
-        macd: {
-          type: "MACD",
-          parameters: {
-            fastPeriod: 12,
-            slowPeriod: 26,
-            signalPeriod: 9
-          },
-          conditions: [
-            {
-              type: "CROSSOVER",
-              compareTo: "signal"
-            }
-          ]
-        },
-        bb: {
-          type: "BB",
-          parameters: {
-            period: 20,
-            stdDev: 2
-          },
-          conditions: [
-            {
-              type: "BELOW",
-              value: "lowerBand"
-            }
-          ]
-        },
-        volume: {
-          type: "VOLUME",
-          parameters: {
-            lookback: 10
-          },
-          conditions: [
-            {
-              type: "ABOVE",
-              value: 150, // 150% of average volume
-              lookback: 10
-            }
-          ]
+        type: "BOLLINGER_MACD",
+        parameters: {
+          bollingerPeriod: 20,
+          bollingerStdDev: 2,
+          macdFastPeriod: 12,
+          macdSlowPeriod: 26,
+          macdSignalPeriod: 9,
+          useVolume: true,
+          volumeThreshold: 2.0
         }
-      },
-      entryRules: [
-        "MACD-Linie kreuzt Signal-Linie von unten",
-        "Preis nahe oder unter unterem Bollinger Band",
-        "Volumen ist 50% über Durchschnitt"
-      ]
+      }
     }
   }
 ];
 
 export const StrategyManager = () => {
-  const { strategies, addStrategy, updateStrategy } = useTradingContext();
   const [activeTab, setActiveTab] = useState("existing");
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [jsonInput, setJsonInput] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [newStrategy, setNewStrategy] = useState<Partial<StrategySchema>>({
-    name: "",
-    description: "",
-    symbols: ["BTCUSDT"],
-    timeframes: ["15m"],
-    riskPerTrade: 1,
-    maxDailyLoss: 5,
-    maxTradesPerDay: 10,
-    stopLoss: 2,
-    takeProfit: 4,
-    trailingStop: false
-  });
-
-  const handleImportStrategy = () => {
-    try {
-      const strategy = JSON.parse(jsonInput) as StrategySchema;
-      
-      // Validate minimum required fields
-      if (!strategy.id || !strategy.name) {
-        throw new Error("Strategie-ID und Name sind erforderlich");
+  const [strategies, setStrategies] = useState<StrategySettings[]>([]);
+  const [jsonContent, setJsonContent] = useState("");
+  const [jsonError, setJsonError] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [templateName, setTemplateName] = useState("");
+  
+  // Load existing strategies on component mount
+  useEffect(() => {
+    const loadedStrategies = strategyService.getAllStrategies();
+    setStrategies(loadedStrategies);
+  }, []);
+  
+  // Convert StrategySchema to StrategySettings
+  const convertSchemaToSettings = (schema: StrategySchema): StrategySettings => {
+    return {
+      id: schema.id || `strategy_${Date.now()}`,
+      name: schema.name,
+      description: schema.description,
+      isActive: schema.isActive !== undefined ? schema.isActive : false,
+      symbols: schema.symbols,
+      stopLoss: schema.stopLoss,
+      takeProfit: schema.takeProfit,
+      trailingStop: schema.trailingStop,
+      trailingTakeProfit: schema.trailingTakeProfit || false,
+      trailingStopDistance: schema.trailingStopDistance || 1.0, // Default value if not provided
+      timeframes: schema.timeframes,
+      riskPerTrade: schema.riskPerTrade,
+      maxDailyLoss: schema.maxDailyLoss,
+      maxTradesPerDay: schema.maxTradesPerDay,
+      indicators: {
+        rsiPeriod: 14,
+        rsiOverbought: 70,
+        rsiOversold: 30,
+        emaShortPeriod: 9,
+        emaLongPeriod: 21,
+        useVolume: true,
+        volumeThreshold: 1.5
       }
+    };
+  };
+  
+  // Toggle strategy active status
+  const handleToggleActive = (id: string) => {
+    const strategy = strategies.find(s => s.id === id);
+    if (strategy) {
+      const isActive = !strategy.isActive;
+      strategyService.updateStrategy(id, { isActive });
       
-      // Add timestamps if missing
-      if (!strategy.createdAt) {
-        strategy.createdAt = Date.now();
-      }
-      strategy.updatedAt = Date.now();
+      // Update UI state
+      setStrategies(strategies.map(s => 
+        s.id === id ? { ...s, isActive } : s
+      ));
       
-      const success = addStrategy(strategy);
+      toast.success(
+        isActive ? "Strategie aktiviert" : "Strategie deaktiviert", 
+        { description: `${strategy.name} wurde ${isActive ? "aktiviert" : "deaktiviert"}.` }
+      );
+    }
+  };
+  
+  // Delete strategy
+  const handleDelete = (id: string) => {
+    const strategy = strategies.find(s => s.id === id);
+    if (strategy) {
+      strategyService.deleteStrategy(id);
       
-      if (success) {
-        toast.success("Strategie importiert", {
-          description: `${strategy.name} wurde erfolgreich importiert.`
-        });
-        setJsonInput("");
-        setIsImportDialogOpen(false);
-      } else {
-        toast.error("Import fehlgeschlagen", {
-          description: "Eine Strategie mit dieser ID existiert bereits."
-        });
-      }
-    } catch (error) {
-      console.error("Error importing strategy:", error);
-      toast.error("Ungültiges JSON-Format", {
-        description: "Die Datei enthält keine gültige Strategie-Definition."
+      // Update UI state
+      setStrategies(strategies.filter(s => s.id !== id));
+      
+      toast.success("Strategie gelöscht", { 
+        description: `${strategy.name} wurde erfolgreich gelöscht.` 
       });
     }
   };
-
+  
+  // Handle JSON import
+  const handleImportJSON = () => {
+    try {
+      setJsonError("");
+      if (!jsonContent.trim()) {
+        setJsonError("JSON-Inhalt ist leer.");
+        return;
+      }
+      
+      const parsed = JSON.parse(jsonContent);
+      
+      // Basic validation
+      if (!parsed.name || !parsed.symbols || !parsed.timeframes) {
+        setJsonError("Ungültiges Strategy-Schema. Name, Symbole und Timeframes sind erforderlich.");
+        return;
+      }
+      
+      // Convert to StrategySettings
+      const newStrategy = convertSchemaToSettings(parsed);
+      
+      // Add the strategy
+      const success = strategyService.addStrategy(newStrategy);
+      
+      if (success) {
+        // Update UI
+        setStrategies([...strategies, newStrategy]);
+        setJsonContent("");
+        setActiveTab("existing");
+        
+        toast.success("Strategie importiert", {
+          description: `${newStrategy.name} wurde erfolgreich hinzugefügt.`
+        });
+      } else {
+        setJsonError("Eine Strategie mit dieser ID existiert bereits.");
+      }
+    } catch (error) {
+      console.error("JSON import error:", error);
+      setJsonError("Fehler beim Parsen des JSON. Bitte überprüfe das Format.");
+    }
+  };
+  
+  // Handle template selection
+  const handleSelectTemplate = (templateId: string) => {
+    setSelectedTemplate(templateId);
+    const template = defaultTemplates.find(t => t.id === templateId);
+    if (template) {
+      setTemplateName(template.schema.name || "");
+    }
+  };
+  
+  // Create strategy from template
   const handleCreateFromTemplate = () => {
-    if (!selectedTemplate) {
-      toast.error("Bitte wähle eine Vorlage aus");
+    const template = defaultTemplates.find(t => t.id === selectedTemplate);
+    
+    if (!template) {
+      toast.error("Bitte wähle eine Template-Strategie aus.");
       return;
     }
     
-    const template = strategyTemplates.find(t => t.id === selectedTemplate);
-    if (!template) return;
-    
-    // Merge template with basic new strategy data
-    const strategyData: StrategySchema = {
-      ...template.schema,
-      ...newStrategy,
-      id: `${selectedTemplate}-${Date.now()}`,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      version: "1.0.0",
-      isActive: true,
-      // Ensure these critical properties exist
-      symbols: newStrategy.symbols || ["BTCUSDT"],
-      timeframes: newStrategy.timeframes || ["15m"],
-      riskPerTrade: newStrategy.riskPerTrade || 1,
-      maxDailyLoss: newStrategy.maxDailyLoss || 5,
-      maxTradesPerDay: newStrategy.maxTradesPerDay || 10,
-      stopLoss: newStrategy.stopLoss || 2,
-      takeProfit: newStrategy.takeProfit || 4,
-      trailingStop: newStrategy.trailingStop || false,
-      indicators: template.schema.indicators || {},
-    } as StrategySchema;
-    
-    const success = addStrategy(strategyData);
-    
-    if (success) {
-      toast.success("Strategie erstellt", {
-        description: `${strategyData.name} wurde erfolgreich erstellt.`
-      });
-      setIsCreateDialogOpen(false);
-      setNewStrategy({
-        name: "",
-        description: "",
-        symbols: ["BTCUSDT"],
-        timeframes: ["15m"],
-        riskPerTrade: 1,
-        maxDailyLoss: 5,
-        maxTradesPerDay: 10,
-        stopLoss: 2,
-        takeProfit: 4,
-        trailingStop: false
-      });
-      setSelectedTemplate(null);
-    } else {
-      toast.error("Erstellung fehlgeschlagen", {
-        description: "Es ist ein Fehler aufgetreten."
-      });
+    try {
+      const schema = {
+        ...template.schema,
+        id: `strategy_${Date.now()}`, // Generate a unique ID
+        name: templateName || template.schema.name,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isActive: false
+      };
+      
+      // Convert to StrategySettings
+      const newStrategy = convertSchemaToSettings(schema as StrategySchema);
+      
+      // Add the strategy
+      const success = strategyService.addStrategy(newStrategy);
+      
+      if (success) {
+        // Update UI
+        setStrategies([...strategies, newStrategy]);
+        setSelectedTemplate("");
+        setTemplateName("");
+        setActiveTab("existing");
+        
+        toast.success("Strategie erstellt", {
+          description: `${newStrategy.name} wurde erfolgreich erstellt.`
+        });
+      } else {
+        toast.error("Fehler beim Erstellen der Strategie.");
+      }
+    } catch (error) {
+      console.error("Template creation error:", error);
+      toast.error("Fehler beim Erstellen der Strategie aus dem Template.");
     }
   };
-
+  
   return (
-    <Card className="trading-card">
+    <Card className="trading-card border-trading-accent bg-trading-card-bg">
       <CardHeader>
-        <CardTitle>Strategie-Manager</CardTitle>
+        <CardTitle className="text-xl text-trading-text">Strategie-Manager</CardTitle>
         <CardDescription>
-          Verwalte deine Trading-Strategien und importiere neue Strategien
+          Verwalte deine Trading-Strategien oder importiere neue
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <CardContent className="space-y-4">
+        <Tabs defaultValue="existing" value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="w-full bg-trading-dark">
             <TabsTrigger value="existing" className="flex-1">
               Vorhandene Strategien
             </TabsTrigger>
             <TabsTrigger value="import" className="flex-1">
-              Strategien importieren
+              JSON Import
+            </TabsTrigger>
+            <TabsTrigger value="template" className="flex-1">
+              Aus Template erstellen
             </TabsTrigger>
           </TabsList>
           
           <TabsContent value="existing" className="space-y-4 pt-4">
             {strategies.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <FileIcon className="mx-auto h-8 w-8 mb-2 opacity-50" />
-                <p>Keine Strategien vorhanden</p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="mt-4"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  <PlusIcon className="mr-2 h-4 w-4" />
-                  Strategie erstellen
-                </Button>
+              <div className="text-center p-6">
+                <p className="text-muted-foreground">Keine Strategien gefunden.</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Erstelle eine neue Strategie aus einem Template oder importiere eine.
+                </p>
               </div>
             ) : (
               <>
-                <div className="grid gap-4">
-                  {strategies.map((strategy) => (
-                    <Card key={strategy.id} className="bg-muted/50">
-                      <CardHeader className="py-3">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <CardTitle className="text-base">{strategy.name}</CardTitle>
-                            <CardDescription className="text-xs">
-                              {strategy.description}
-                            </CardDescription>
+                {strategies.map((strategy) => (
+                  <Card key={strategy.id} className="bg-trading-card-alt">
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-trading-text">
+                              {strategy.name}
+                            </h4>
+                            <Badge
+                              variant={strategy.isActive ? "default" : "outline"}
+                              className={strategy.isActive ? "bg-green-600" : ""}
+                            >
+                              {strategy.isActive ? "Aktiv" : "Inaktiv"}
+                            </Badge>
                           </div>
-                          <div className="flex items-center">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8"
-                              onClick={() => {
-                                updateStrategy(strategy.id, { isActive: !strategy.isActive });
-                                toast.success(
-                                  strategy.isActive ? "Strategie deaktiviert" : "Strategie aktiviert",
-                                  {
-                                    description: `${strategy.name} wurde ${strategy.isActive ? "deaktiviert" : "aktiviert"}.`
-                                  }
-                                );
-                              }}
-                            >
-                              <div className={`h-3 w-3 rounded-full ${strategy.isActive ? 'bg-success-DEFAULT' : 'bg-muted-foreground'}`} />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8"
-                              onClick={() => {
-                                // Open edit dialog (to be implemented)
-                                toast.info("Bearbeiten", { description: "Strategie-Editor wird bald verfügbar sein." });
-                              }}
-                            >
-                              <FilePenIcon className="h-4 w-4" />
-                            </Button>
+                          <p className="text-sm text-muted-foreground">
+                            {strategy.description}
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {strategy.symbols.map((symbol) => (
+                              <Badge key={symbol} variant="secondary" className="text-xs">
+                                {symbol}
+                              </Badge>
+                            ))}
+                            {strategy.timeframes.map((timeframe) => (
+                              <Badge key={timeframe} variant="outline" className="text-xs">
+                                {timeframe}
+                              </Badge>
+                            ))}
                           </div>
                         </div>
-                      </CardHeader>
-                      <CardContent className="py-2">
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <span className="text-muted-foreground">Symbole:</span>{" "}
-                            {strategy.symbols.join(', ')}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Timeframes:</span>{" "}
-                            {strategy.timeframes.join(', ')}
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Stop-Loss:</span>{" "}
-                            {strategy.stopLoss}%
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Take-Profit:</span>{" "}
-                            {strategy.takeProfit}%
-                          </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant={strategy.isActive ? "destructive" : "default"}
+                            size="sm"
+                            onClick={() => handleToggleActive(strategy.id)}
+                          >
+                            {strategy.isActive ? "Deaktivieren" : "Aktivieren"}
+                          </Button>
+                          <Button
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDelete(strategy.id)}
+                          >
+                            Löschen
+                          </Button>
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-                
-                <div className="flex justify-center mt-4">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setIsCreateDialogOpen(true)}
-                  >
-                    <PlusIcon className="mr-2 h-4 w-4" />
-                    Neue Strategie erstellen
-                  </Button>
-                </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </>
             )}
           </TabsContent>
           
           <TabsContent value="import" className="space-y-4 pt-4">
-            <div className="grid gap-4">
-              <div className="p-6 border-2 border-dashed rounded-lg text-center">
-                <UploadIcon className="mx-auto h-8 w-8 mb-2 text-muted-foreground" />
-                <h3 className="text-sm font-medium mb-2">JSON-Strategie importieren</h3>
-                <p className="text-xs text-muted-foreground mb-4">
-                  Importiere eine bestehende Strategie im JSON-Format
-                </p>
-                <Button 
-                  variant="secondary" 
-                  onClick={() => setIsImportDialogOpen(true)}
-                >
-                  JSON importieren
-                </Button>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="json-input">JSON-Strategy-Schema</Label>
+                <div className="mt-1">
+                  <textarea
+                    id="json-input"
+                    className="w-full h-64 rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    placeholder='{"name": "My Strategy", "symbols": ["BTCUSDT"], ...}'
+                    value={jsonContent}
+                    onChange={(e) => setJsonContent(e.target.value)}
+                  ></textarea>
+                </div>
+                {jsonError && (
+                  <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                    <CircleAlertIcon className="h-4 w-4" /> {jsonError}
+                  </p>
+                )}
               </div>
               
-              <div className="p-6 border-2 border-dashed rounded-lg text-center">
-                <FileIcon className="mx-auto h-8 w-8 mb-2 text-muted-foreground" />
-                <h3 className="text-sm font-medium mb-2">Strategie aus Vorlage erstellen</h3>
-                <p className="text-xs text-muted-foreground mb-4">
-                  Erstelle eine neue Strategie basierend auf einer Vorlage
-                </p>
-                <Button 
-                  variant="secondary"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  Vorlage verwenden
-                </Button>
+              <Button
+                className="w-full flex items-center gap-2"
+                onClick={handleImportJSON}
+              >
+                <UploadIcon className="h-4 w-4" /> Strategie importieren
+              </Button>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="template" className="space-y-4 pt-4">
+            <div className="space-y-4">
+              <div className="grid gap-4">
+                {defaultTemplates.map((template) => (
+                  <div 
+                    key={template.id}
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                      selectedTemplate === template.id
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:border-primary/50"
+                    }`}
+                    onClick={() => handleSelectTemplate(template.id)}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-medium">{template.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {template.description}
+                        </p>
+                      </div>
+                      {selectedTemplate === template.id && (
+                        <CheckCircle2Icon className="h-5 w-5 text-primary" />
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
+              
+              {selectedTemplate && (
+                <div className="space-y-4 pt-2">
+                  <Separator />
+                  <div>
+                    <Label htmlFor="template-name">Name der neuen Strategie</Label>
+                    <Input
+                      id="template-name"
+                      className="mt-1"
+                      placeholder={defaultTemplates.find(t => t.id === selectedTemplate)?.schema.name}
+                      value={templateName}
+                      onChange={(e) => setTemplateName(e.target.value)}
+                    />
+                  </div>
+                  
+                  <Button
+                    className="w-full flex items-center gap-2"
+                    onClick={handleCreateFromTemplate}
+                  >
+                    <PlusIcon className="h-4 w-4" /> Strategie erstellen
+                  </Button>
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>
-        
-        {/* Import JSON Dialog */}
-        <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
-              <DialogTitle>Strategie importieren</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-2">
-              <div className="space-y-2">
-                <Label htmlFor="strategy-json">JSON-Daten</Label>
-                <Textarea
-                  id="strategy-json"
-                  placeholder='{"id": "meine-strategie", "name": "Meine Strategie", ...}'
-                  value={jsonInput}
-                  onChange={(e) => setJsonInput(e.target.value)}
-                  className="font-mono text-sm h-64"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Füge die JSON-Daten deiner Strategie ein.
-                </p>
-              </div>
-              
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>
-                  Abbrechen
-                </Button>
-                <Button onClick={handleImportStrategy}>
-                  <SaveIcon className="mr-2 h-4 w-4" />
-                  Importieren
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-        
-        {/* Create Strategy Dialog */}
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
-              <DialogTitle>Strategie erstellen</DialogTitle>
-            </DialogHeader>
-            <ScrollArea className="h-[500px] pr-4">
-              <div className="space-y-4 mt-2">
-                <div className="space-y-2">
-                  <Label>Strategie-Vorlage</Label>
-                  <div className="grid grid-cols-1 gap-2">
-                    {strategyTemplates.map(template => (
-                      <Card
-                        key={template.id}
-                        className={`cursor-pointer transition-colors ${
-                          selectedTemplate === template.id 
-                            ? "border-2 border-primary" 
-                            : "border border-muted hover:border-input"
-                        }`}
-                        onClick={() => setSelectedTemplate(template.id)}
-                      >
-                        <CardHeader className="p-4 pb-2">
-                          <CardTitle className="text-base">{template.name}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 pt-0">
-                          <p className="text-sm text-muted-foreground">
-                            {template.description}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-                
-                <div className="space-y-4 pt-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="strategy-name">Name</Label>
-                    <Input
-                      id="strategy-name"
-                      placeholder="Strategie-Name"
-                      value={newStrategy.name}
-                      onChange={(e) => setNewStrategy({...newStrategy, name: e.target.value})}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="strategy-description">Beschreibung</Label>
-                    <Textarea
-                      id="strategy-description"
-                      placeholder="Beschreibung der Strategie"
-                      value={newStrategy.description}
-                      onChange={(e) => setNewStrategy({...newStrategy, description: e.target.value})}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="strategy-symbols">Symbole (kommagetrennt)</Label>
-                    <Input
-                      id="strategy-symbols"
-                      placeholder="BTCUSDT, ETHUSDT, ..."
-                      value={newStrategy.symbols?.join(', ')}
-                      onChange={(e) => setNewStrategy({
-                        ...newStrategy, 
-                        symbols: e.target.value.split(',').map(s => s.trim())
-                      })}
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="strategy-timeframes">Timeframes (kommagetrennt)</Label>
-                    <Input
-                      id="strategy-timeframes"
-                      placeholder="15m, 1h, 4h, ..."
-                      value={newStrategy.timeframes?.join(', ')}
-                      onChange={(e) => setNewStrategy({
-                        ...newStrategy, 
-                        timeframes: e.target.value.split(',').map(s => s.trim())
-                      })}
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="strategy-sl">Stop-Loss (%)</Label>
-                      <Input
-                        id="strategy-sl"
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={newStrategy.stopLoss}
-                        onChange={(e) => setNewStrategy({
-                          ...newStrategy,
-                          stopLoss: parseFloat(e.target.value)
-                        })}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="strategy-tp">Take-Profit (%)</Label>
-                      <Input
-                        id="strategy-tp"
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={newStrategy.takeProfit}
-                        onChange={(e) => setNewStrategy({
-                          ...newStrategy,
-                          takeProfit: parseFloat(e.target.value)
-                        })}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </ScrollArea>
-            
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                Abbrechen
-              </Button>
-              <Button 
-                onClick={handleCreateFromTemplate}
-                disabled={!selectedTemplate || !newStrategy.name}
-              >
-                <SaveIcon className="mr-2 h-4 w-4" />
-                Strategie erstellen
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </CardContent>
     </Card>
   );
