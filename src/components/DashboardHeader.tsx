@@ -65,11 +65,15 @@ export const DashboardHeader = () => {
     }
   };
 
-  const handleLogout = () => {
-    logout();
-    toast.success("Abgemeldet", {
-      description: "Sie wurden erfolgreich abgemeldet."
+  const handleBackToApiSetup = () => {
+    // Reset API keys and refresh the dashboard
+    localStorage.removeItem("binance_api_key");
+    localStorage.removeItem("binance_secret_key");
+    toast.success("API-Setup", {
+      description: "Sie können nun Ihre API-Zugangsdaten neu eingeben."
     });
+    // Force refresh the dashboard to show API key form
+    window.location.reload();
   };
 
   return (
@@ -112,10 +116,10 @@ export const DashboardHeader = () => {
               variant="outline" 
               size="sm"
               className="gap-1.5"
-              onClick={handleLogout}
+              onClick={handleBackToApiSetup}
             >
               <ArrowLeftIcon className="h-4 w-4" />
-              <span>Zurück zum Login</span>
+              <span>Back to API Setup</span>
             </Button>
             <Button 
               variant="outline" 
