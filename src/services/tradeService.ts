@@ -94,7 +94,12 @@ class TradeService {
         (!symbol || trade.symbol === symbol) && 
         (!strategyId || trade.strategyId === strategyId)
       )
-      .sort((a, b) => b.entryTime - a.entryTime)
+      .sort((a, b) => {
+        // Convert both to numbers if they're strings
+        const aTime = typeof a.entryTime === 'string' ? parseInt(a.entryTime) : a.entryTime;
+        const bTime = typeof b.entryTime === 'string' ? parseInt(b.entryTime) : b.entryTime;
+        return bTime - aTime;
+      })
       .slice(0, limit);
   }
   
@@ -260,7 +265,12 @@ class TradeService {
     
     // Calculate current equity
     const completedTrades = tradeHistory.trades.filter(t => t.status === 'CLOSED' && t.pnl !== undefined);
-    const totalPnL = completedTrades.reduce((sum, trade) => sum + (trade.pnl || 0), 0);
+    const totalPnL = completedTrades.reduce((sum, trade) => {
+      // Ensure pnl is a number
+      const tradePnl = typeof trade.pnl === 'string' ? parseFloat(trade.pnl) : (trade.pnl || 0);
+      return sum + tradePnl;
+    }, 0);
+    
     const currentEquity = this.initialBalance + totalPnL;
     
     // Add new equity point if value changed

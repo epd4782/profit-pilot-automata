@@ -192,7 +192,11 @@ export const TradingProvider = ({ children }: { children: ReactNode }) => {
       // Calculate total profit from trades
       const totalProfit = trades
         .filter(t => t.status === 'CLOSED' && t.pnl !== undefined)
-        .reduce((sum, trade) => sum + (trade.pnl || 0), 0);
+        .reduce((sum, trade) => {
+          // Ensure pnl is a number
+          const tradePnl = typeof trade.pnl === 'string' ? parseFloat(trade.pnl) : (trade.pnl || 0);
+          return sum + tradePnl;
+        }, 0);
       
       setProfit({
         daily: todayPerf?.profit || 0,
@@ -208,7 +212,7 @@ export const TradingProvider = ({ children }: { children: ReactNode }) => {
         yearly: tradeService.getEquityData('yearly')
       });
       
-      // Load account balances
+      // Load account balances - always get fresh data from Binance
       if (binanceService.isConfigured()) {
         const accountInfo = await binanceService.getAccountInfo();
         const tickers = await binanceService.getTickers([]);
@@ -241,6 +245,9 @@ export const TradingProvider = ({ children }: { children: ReactNode }) => {
         // Calculate total balance
         const total = balancesWithUsdt.reduce((sum, b) => sum + parseFloat(b.totalUSDT), 0);
         setTotalBalance(total);
+        
+        console.log("Updated balances from Binance:", balancesWithUsdt);
+        console.log("Total USDT Balance:", total);
       }
       
       // Update bot status

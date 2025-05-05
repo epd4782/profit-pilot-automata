@@ -447,22 +447,54 @@ class StrategyService {
       
       const currentPrice = parseFloat(tickers[0].price);
       
-      // Calculate trade size based on risk settings
+      // Get real-time account info to calculate trade size based on current balance
       const accountInfo = await binanceService.getAccountInfo();
       const usdtBalance = accountInfo.balances.find(b => b.asset === 'USDT');
       
       if (!usdtBalance) {
         console.error('Could not determine USDT balance');
+        toast.error('Kein USDT-Guthaben gefunden');
         return;
       }
       
+      // Ensure we're working with number types for calculations
       const availableBalance = parseFloat(usdtBalance.free);
-      const tradeAmount = availableBalance * (strategySettings.riskPerTrade / 100);
+      const riskPercentage = Number(strategySettings.riskPerTrade);
+      
+      // Validate the balance and risk calculations
+      if (isNaN(availableBalance) || availableBalance <= 0) {
+        toast.error('Unzureichendes Guthaben für Trading', {
+          description: 'Dein USDT-Guthaben ist zu niedrig oder nicht verfügbar.'
+        });
+        return;
+      }
+      
+      if (isNaN(riskPercentage) || riskPercentage <= 0) {
+        toast.error('Ungültige Risiko-Einstellung', {
+          description: 'Bitte überprüfe die Risiko-Einstellungen in deiner Strategie.'
+        });
+        return;
+      }
+      
+      // Calculate trade amount based on risk settings
+      const tradeAmount = availableBalance * (riskPercentage / 100);
+      
+      // Security check: Ensure trade amount is reasonable and within balance
+      if (tradeAmount <= 0 || tradeAmount > availableBalance) {
+        toast.error('Ungültiger Trade-Betrag', {
+          description: `Berechneter Betrag (${tradeAmount.toFixed(2)} USDT) ist ungültig oder überschreitet das verfügbare Guthaben.`
+        });
+        return;
+      }
+      
       const quantity = (tradeAmount / currentPrice).toFixed(6);
       
       // Convert LONG/SHORT to BUY/SELL for Binance API
       const orderType = 'MARKET';
       const orderSide = signal.side === 'LONG' ? 'BUY' : 'SELL';
+      
+      console.log(`Executing trade: ${orderSide} ${quantity} ${signal.symbol} at ${currentPrice}`);
+      console.log(`Available balance: ${availableBalance} USDT, Risk: ${riskPercentage}%, Trade amount: ${tradeAmount} USDT`);
       
       // For demo/test purposes, use createTestOrder
       // In production, you would use createOrder
@@ -474,7 +506,7 @@ class StrategyService {
       );
       
       if (order) {
-        console.log(`Order placed: ${orderSide} ${quantity} ${signal.symbol} at ${currentPrice}`);
+        console.log(`Order placed successfully: ${orderSide} ${quantity} ${signal.symbol} at ${currentPrice}`);
         
         // Log the trade with timestamp as number
         const trade = tradeService.addTrade({
@@ -485,19 +517,19 @@ class StrategyService {
           stopLoss: signal.stopLoss,
           takeProfit: signal.takeProfit,
           quantity: parseFloat(quantity),
-          side: signal.side, // Now Trade interface supports LONG/SHORT directly
+          side: signal.side,
           status: 'OPEN',
           profit: 0,
           profitPercentage: 0,
           exitPrice: 0,
           exitTime: null,
-          notes: `Signal confidence: ${signal.confidence}%, Timeframe: ${signal.timeframe}`
+          notes: `Signal confidence: ${signal.confidence}%, Timeframe: ${signal.timeframe}, Balance: ${availableBalance} USDT`
         });
         
         toast.success(
           `${signal.side} Signal erkannt: ${signal.symbol}`,
           {
-            description: `Konfidenz: ${signal.confidence}%, Timeframe: ${signal.timeframe}`
+            description: `Konfidenz: ${signal.confidence}%, Timeframe: ${signal.timeframe}, Einsatz: ${tradeAmount.toFixed(2)} USDT`
           }
         );
         

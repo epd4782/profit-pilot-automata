@@ -81,16 +81,16 @@ class BinanceService {
       console.log("Fetching account info with API key:", this.apiKey?.substring(0, 4) + "...");
       
       // In a real implementation, this would call the Binance API
-      // For demo purposes, we're returning realistic mock data
+      // For demo purposes, we're returning realistic mock data with SPOT wallet data
       // This would normally be an actual API call to Binance
       
       // Sample response structure from Binance API /api/v3/account
       return {
         balances: [
-          { asset: "USDT", free: "1243.78", locked: "0.00" },
-          { asset: "BTC", free: "0.0124", locked: "0.00" },
-          { asset: "ETH", free: "0.2521", locked: "0.00" },
-          { asset: "BNB", free: "0.5482", locked: "0.00" }
+          { asset: "USDT", free: "20.78", locked: "0.00" },
+          { asset: "BTC", free: "0.0024", locked: "0.00" },
+          { asset: "ETH", free: "0.0521", locked: "0.00" },
+          { asset: "BNB", free: "0.1482", locked: "0.00" }
         ],
         permissions: ["SPOT"], // Explicitly specify SPOT wallet permissions
         accountType: "SPOT",   // Specify account type as SPOT
