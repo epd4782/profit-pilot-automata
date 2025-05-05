@@ -1,15 +1,17 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { WalletIcon, PlayIcon, SquareIcon, SettingsIcon, TrendingUpIcon, WifiIcon } from 'lucide-react';
+import { WalletIcon, PlayIcon, SquareIcon, SettingsIcon, TrendingUpIcon, WifiIcon, ArrowLeftIcon } from 'lucide-react';
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SettingsModal } from './SettingsModal';
 import { WalletModal } from './WalletModal';
 import { useTradingContext } from '@/contexts/TradingContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const DashboardHeader = () => {
   const { isRunning, toggleBot, isLoading } = useTradingContext();
+  const { logout } = useAuth();
   const [isTogglingBot, setIsTogglingBot] = useState(false);
   const [apiStatus, setApiStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -63,6 +65,13 @@ export const DashboardHeader = () => {
     }
   };
 
+  const handleLogout = () => {
+    logout();
+    toast.success("Abgemeldet", {
+      description: "Sie wurden erfolgreich abgemeldet."
+    });
+  };
+
   return (
     <>
       <div className="flex justify-between items-center mb-6 pt-4 pb-2">
@@ -99,6 +108,15 @@ export const DashboardHeader = () => {
           </div>
 
           <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="gap-1.5"
+              onClick={handleLogout}
+            >
+              <ArrowLeftIcon className="h-4 w-4" />
+              <span>Zurück zum Login</span>
+            </Button>
             <Button 
               variant="outline" 
               size="sm"

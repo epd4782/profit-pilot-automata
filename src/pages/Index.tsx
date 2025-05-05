@@ -3,28 +3,28 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { TrendingUpIcon } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   const handleEnterDashboard = () => {
     setLoading(true);
     setTimeout(() => {
-      navigate('/dashboard');
+      navigate('/login');
     }, 500);
   };
 
   useEffect(() => {
-    // Prüfe, ob API-Schlüssel konfiguriert sind und leite direkt zum Dashboard weiter
-    const hasApiKeys = localStorage.getItem("binance_api_key") && localStorage.getItem("binance_secret_key");
-    
-    if (hasApiKeys) {
+    // Check if user is authenticated and redirect to dashboard
+    if (isAuthenticated) {
       setTimeout(() => {
         navigate('/dashboard');
       }, 500);
     }
-  }, [navigate]);
+  }, [isAuthenticated, navigate]);
 
   return (
     <div className="min-h-screen bg-trading-dark flex flex-col items-center justify-center p-4">
