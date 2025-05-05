@@ -1,4 +1,3 @@
-
 import { binanceService } from "./binanceService";
 import { tradeService } from "./tradeService";
 import { toast } from "sonner";
@@ -461,7 +460,7 @@ class StrategyService {
       const tradeAmount = availableBalance * (strategySettings.riskPerTrade / 100);
       const quantity = (tradeAmount / currentPrice).toFixed(6);
       
-      // Place order
+      // Convert LONG/SHORT to BUY/SELL for Binance API
       const orderType = 'MARKET';
       const orderSide = signal.side === 'LONG' ? 'BUY' : 'SELL';
       
@@ -477,7 +476,7 @@ class StrategyService {
       if (order) {
         console.log(`Order placed: ${orderSide} ${quantity} ${signal.symbol} at ${currentPrice}`);
         
-        // Log the trade
+        // Log the trade with timestamp as number
         const trade = tradeService.addTrade({
           symbol: signal.symbol,
           entryTime: Date.now(),
@@ -486,8 +485,12 @@ class StrategyService {
           stopLoss: signal.stopLoss,
           takeProfit: signal.takeProfit,
           quantity: parseFloat(quantity),
-          side: signal.side,
+          side: signal.side, // Now Trade interface supports LONG/SHORT directly
           status: 'OPEN',
+          profit: 0,
+          profitPercentage: 0,
+          exitPrice: 0,
+          exitTime: null,
           notes: `Signal confidence: ${signal.confidence}%, Timeframe: ${signal.timeframe}`
         });
         
@@ -526,15 +529,15 @@ class StrategyService {
         
         if (isWin) {
           // Win - between 50-100% of take profit
-          pnlPercentage = trade.side === 'LONG'
-            ? ((trade.takeProfit - trade.entryPrice) / trade.entryPrice) * (0.5 + Math.random() * 0.5)
-            : ((trade.entryPrice - trade.takeProfit) / trade.entryPrice) * (0.5 + Math.random() * 0.5);
+          pnlPercentage = trade.side === 'LONG' || trade.side === 'BUY'
+            ? ((trade.takeProfit! - trade.entryPrice) / trade.entryPrice) * (0.5 + Math.random() * 0.5)
+            : ((trade.entryPrice - trade.takeProfit!) / trade.entryPrice) * (0.5 + Math.random() * 0.5);
           reason = 'TAKE_PROFIT';
         } else {
           // Loss - between 80-100% of stop loss
-          pnlPercentage = trade.side === 'LONG'
-            ? -((trade.entryPrice - trade.stopLoss) / trade.entryPrice) * (0.8 + Math.random() * 0.2)
-            : -((trade.stopLoss - trade.entryPrice) / trade.entryPrice) * (0.8 + Math.random() * 0.2);
+          pnlPercentage = trade.side === 'LONG' || trade.side === 'BUY'
+            ? -((trade.entryPrice - trade.stopLoss!) / trade.entryPrice) * (0.8 + Math.random() * 0.2)
+            : -((trade.stopLoss! - trade.entryPrice) / trade.entryPrice) * (0.8 + Math.random() * 0.2);
           reason = 'STOP_LOSS';
         }
         
@@ -542,7 +545,7 @@ class StrategyService {
         const pnl = trade.quantity * trade.entryPrice * pnlPercentage;
         
         // Calculate exit price
-        const exitPrice = trade.side === 'LONG'
+        const exitPrice = trade.side === 'LONG' || trade.side === 'BUY'
           ? trade.entryPrice * (1 + pnlPercentage)
           : trade.entryPrice * (1 - pnlPercentage);
         
@@ -550,10 +553,10 @@ class StrategyService {
         tradeService.updateTrade(tradeId, {
           status: 'CLOSED',
           exitTime: Date.now(),
-          exitPrice,
-          pnl,
-          pnlPercentage: pnlPercentage * 100,
-          reason
+          exitPrice: exitPrice,
+          pnl: pnl,
+          profitPercentage: pnlPercentage * 100,
+          reason: reason
         });
         
         // Notification

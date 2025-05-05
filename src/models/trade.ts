@@ -5,16 +5,18 @@ export interface Trade {
   entryPrice: number;
   exitPrice: number;
   quantity: number;
-  side: 'BUY' | 'SELL';
+  side: 'BUY' | 'SELL' | 'LONG' | 'SHORT';  // Updated to support both formats
   status: 'OPEN' | 'CLOSED' | 'CANCELED';
   profit: number;
   profitPercentage: number;
-  entryTime: string;
-  exitTime: string | null;
+  entryTime: string | number;  // Updated to accept both string and number
+  exitTime: string | number | null;  // Updated to accept both string and number
   stopLoss: number | null;
   takeProfit: number | null;
   strategyId: string;
-  pnl?: number; // Added pnl field that was missing
+  pnl?: number;
+  notes?: string;  // Added for signal confidence and other details
+  reason?: 'TAKE_PROFIT' | 'STOP_LOSS';  // Added for tracking why trades closed
 }
 
 export interface StrategySettings {

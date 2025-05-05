@@ -204,13 +204,17 @@ class TradeService {
         // Only process trades within the requested time range
         if (dailyMap[dateStr]) {
           dailyMap[dateStr].trades++;
-          dailyMap[dateStr].profit += trade.pnl || 0;
           
-          // Update win rate
-          if (trade.pnl && trade.pnl > 0) {
-            dailyMap[dateStr].winRate = (dailyMap[dateStr].winRate * (dailyMap[dateStr].trades - 1) + 1) / dailyMap[dateStr].trades;
-          } else if (trade.pnl && trade.pnl < 0) {
-            dailyMap[dateStr].winRate = dailyMap[dateStr].winRate * (dailyMap[dateStr].trades - 1) / dailyMap[dateStr].trades;
+          // Fix: Ensure pnl is a number before arithmetic operation
+          if (trade.pnl !== undefined) {
+            dailyMap[dateStr].profit += Number(trade.pnl);
+            
+            // Update win rate
+            if (trade.pnl > 0) {
+              dailyMap[dateStr].winRate = (dailyMap[dateStr].winRate * (dailyMap[dateStr].trades - 1) + 1) / dailyMap[dateStr].trades;
+            } else if (trade.pnl < 0) {
+              dailyMap[dateStr].winRate = dailyMap[dateStr].winRate * (dailyMap[dateStr].trades - 1) / dailyMap[dateStr].trades;
+            }
           }
         }
       });
