@@ -10,8 +10,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowDownIcon, ArrowUpIcon, CoinsIcon, WalletIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, CoinsIcon, WalletIcon, RefreshCwIcon } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { binanceService } from "@/services/binanceService";
+import { toast } from "sonner";
 
 interface WalletModalProps {
   isOpen: boolean;
@@ -31,36 +33,82 @@ export const WalletModal = ({ isOpen, onOpenChange }: WalletModalProps) => {
   const [balances, setBalances] = useState<BalanceItem[]>([]);
   const [totalBalance, setTotalBalance] = useState("0.00");
   
-  // Mock data - in a real app this would come from the Binance API
+  // Load data when the modal opens
   useEffect(() => {
     if (isOpen) {
-      setIsLoading(true);
-      // Simulate API call
-      setTimeout(() => {
-        const mockBalances = [
-          { asset: "USDT", free: "243.78", locked: "0.00", totalUSDT: "243.78" },
-          { asset: "BTC", free: "0.0024", locked: "0.00", totalUSDT: "124.56" },
-          { asset: "ETH", free: "0.0521", locked: "0.00", totalUSDT: "112.95" },
-          { asset: "BNB", free: "0.1482", locked: "0.00", totalUSDT: "65.23" },
-        ];
-        
-        setBalances(mockBalances);
-        
-        // Calculate total balance
-        const total = mockBalances.reduce((sum, item) => sum + parseFloat(item.totalUSDT), 0);
-        setTotalBalance(total.toFixed(2));
-        
-        setIsLoading(false);
-      }, 1000);
+      loadWalletData();
     }
   }, [isOpen]);
+  
+  const loadWalletData = async () => {
+    setIsLoading(true);
+    try {
+      // Check if API is configured
+      if (!binanceService.isConfigured()) {
+        toast.error("API-Schlüssel nicht konfiguriert", {
+          description: "Bitte konfigurieren Sie zuerst Ihre API-Schlüssel"
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      // Fetch real account data
+      const accountInfo = await binanceService.getAccountInfo();
+      const tickers = await binanceService.getTickers([]);
+      
+      // Calculate USDT values for each asset
+      const balancesWithUsdt = accountInfo.balances
+        .filter(b => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0)
+        .map(balance => {
+          let usdtValue = "0.00";
+          
+          if (balance.asset === 'USDT') {
+            usdtValue = balance.free;
+          } else {
+            const ticker = tickers.find(t => t.symbol === `${balance.asset}USDT`);
+            if (ticker) {
+              const total = parseFloat(balance.free) + parseFloat(balance.locked);
+              usdtValue = (total * parseFloat(ticker.price)).toFixed(2);
+            }
+          }
+          
+          return {
+            ...balance,
+            totalUSDT: usdtValue
+          };
+        })
+        .sort((a, b) => parseFloat(b.totalUSDT) - parseFloat(a.totalUSDT));
+      
+      setBalances(balancesWithUsdt);
+      
+      // Calculate total balance
+      const total = balancesWithUsdt.reduce((sum, b) => sum + parseFloat(b.totalUSDT), 0);
+      setTotalBalance(total.toFixed(2));
+      
+    } catch (error) {
+      console.error("Error loading wallet data:", error);
+      toast.error("Fehler beim Laden der Wallet-Daten");
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[550px] bg-trading-card border-trading-border">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <WalletIcon className="h-5 w-5" /> Wallet-Übersicht
+          <DialogTitle className="flex items-center gap-2 justify-between">
+            <div className="flex items-center gap-2">
+              <WalletIcon className="h-5 w-5" /> Wallet-Übersicht
+            </div>
+            <Button 
+              variant="outline" 
+              size="icon" 
+              onClick={loadWalletData}
+              disabled={isLoading}
+            >
+              <RefreshCwIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
           </DialogTitle>
         </DialogHeader>
         
@@ -80,8 +128,8 @@ export const WalletModal = ({ isOpen, onOpenChange }: WalletModalProps) => {
                 
                 <div className="flex items-center gap-2 mt-3">
                   <ArrowUpIcon className="h-4 w-4 text-success-DEFAULT" />
-                  <span className="text-sm text-success-DEFAULT">+3.25%</span>
-                  <span className="text-xs text-muted-foreground">in 24h</span>
+                  <span className="text-sm text-success-DEFAULT">Live SPOT Wallet</span>
+                  <span className="text-xs text-muted-foreground">Daten</span>
                 </div>
               </CardContent>
             </Card>
@@ -95,27 +143,33 @@ export const WalletModal = ({ isOpen, onOpenChange }: WalletModalProps) => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {balances.map((balance) => (
-                    <div 
-                      key={balance.asset}
-                      className="flex items-center justify-between p-3 rounded-md bg-trading-dark border border-trading-border"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-trading-border flex items-center justify-center">
-                          <CoinsIcon className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <div className="font-medium">{balance.asset}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {balance.free} verfügbar
+                  {balances.length > 0 ? (
+                    balances.map((balance) => (
+                      <div 
+                        key={balance.asset}
+                        className="flex items-center justify-between p-3 rounded-md bg-trading-dark border border-trading-border"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-trading-border flex items-center justify-center">
+                            <CoinsIcon className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <div className="font-medium">{balance.asset}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {balance.free} verfügbar
+                            </div>
                           </div>
                         </div>
+                        <div className="text-right">
+                          <div className="font-medium">{balance.totalUSDT} USDT</div>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-medium">{balance.totalUSDT} USDT</div>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="py-8 text-center text-muted-foreground">
+                      Keine Assets gefunden oder keine Berechtigung zum Lesen der Wallet-Daten.
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
@@ -166,7 +220,12 @@ export const WalletModal = ({ isOpen, onOpenChange }: WalletModalProps) => {
           </TabsContent>
         </Tabs>
         
-        <DialogFooter>
+        <DialogFooter className="flex justify-between items-center">
+          <div className="text-xs text-muted-foreground">
+            {binanceService.isConfigured() 
+              ? "SPOT Wallet verbunden" 
+              : "API nicht konfiguriert"}
+          </div>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Schließen
           </Button>

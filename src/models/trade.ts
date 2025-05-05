@@ -14,6 +14,7 @@ export interface Trade {
   stopLoss: number | null;
   takeProfit: number | null;
   strategyId: string;
+  pnl?: number; // Added pnl field that was missing
 }
 
 export interface StrategySettings {
@@ -40,4 +41,41 @@ export interface StrategySchema {
     compareTo?: string;
     timeframe?: string;
   }[];
+}
+
+// Adding missing interfaces for equity tracking
+export interface EquityPoint {
+  timestamp: number;
+  value: number;
+}
+
+export interface EquityHistory {
+  data: EquityPoint[];
+  lastUpdated: number;
+}
+
+export interface TradeHistory {
+  trades: Trade[];
+  lastUpdated: number;
+}
+
+export interface StrategyPerformance {
+  strategyId: string;
+  totalTrades: number;
+  winningTrades: number;
+  losingTrades: number;
+  breakEvenTrades: number;
+  totalProfit: number;
+  averageProfitPerTrade: number;
+  winRate: number;
+  consecutiveLosses: number;
+  consecutiveWins: number;
+  lastTradeResult?: 'WIN' | 'LOSS' | 'BREAK_EVEN';
+}
+
+export interface DailyPerformance {
+  date: string;
+  trades: number;
+  profit: number;
+  winRate: number;
 }
