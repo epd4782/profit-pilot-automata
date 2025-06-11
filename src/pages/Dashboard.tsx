@@ -5,6 +5,7 @@ import { PerformanceChart } from "@/components/PerformanceChart";
 import { StatCard } from "@/components/StatCard";
 import { RecentTradesTable } from "@/components/RecentTradesTable";
 import { StrategySelector } from "@/components/StrategySelector";
+import { VolatilityWidget } from "@/components/VolatilityWidget";
 import { ApiKeyForm } from "@/components/ApiKeyForm";
 import { TradingProvider, useTradingContext } from "@/contexts/TradingContext";
 
@@ -54,13 +55,16 @@ const DashboardContent = () => {
               />
             </div>
             
-            {/* Chart and Strategy Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            {/* Chart, Strategy and Volatility Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-4">
               <div className="lg:col-span-2">
                 <PerformanceChart />
               </div>
               <div>
                 <StrategySelector />
+              </div>
+              <div>
+                <VolatilityWidget />
               </div>
             </div>
             

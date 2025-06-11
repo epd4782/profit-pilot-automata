@@ -3,6 +3,8 @@ import { createContext, useContext, ReactNode, useState, useEffect } from "react
 import { binanceService } from "@/services/binanceService";
 import { strategyService, StrategySettings } from "@/services/strategyService";
 import { tradeService } from "@/services/tradeService";
+import { volatilityService } from "@/services/volatilityService";
+import { extremeStopService } from "@/services/extremeStopService";
 import { Trade, EquityPoint } from "@/models/trade";
 import { toast } from "sonner";
 
@@ -100,6 +102,12 @@ export const TradingProvider = ({ children }: { children: ReactNode }) => {
     // Initialize bot status
     setIsRunning(strategyService.isActive());
     
+    // Initialize volatility service if bot is configured
+    if (strategyService.isActive()) {
+      volatilityService.startTracking();
+      extremeStopService.startMonitoring();
+    }
+    
     // Update data every 30 seconds
     const interval = setInterval(() => {
       refreshData();
@@ -107,6 +115,8 @@ export const TradingProvider = ({ children }: { children: ReactNode }) => {
     
     return () => {
       clearInterval(interval);
+      volatilityService.stopTracking();
+      extremeStopService.stopMonitoring();
     };
   }, []);
   

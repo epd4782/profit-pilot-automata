@@ -1,5 +1,7 @@
 import { binanceService } from "./binanceService";
 import { tradeService } from "./tradeService";
+import { volatilityService } from "./volatilityService";
+import { extremeStopService } from "./extremeStopService";
 import { logger } from "./loggerService";
 import { toast } from "sonner";
 
@@ -221,6 +223,12 @@ class StrategyService {
       }
     });
     
+    // Start volatility tracking
+    volatilityService.startTracking();
+    
+    // Start extreme stop monitoring
+    extremeStopService.startMonitoring();
+    
     // Start analysis interval with error handling
     this.analysisInterval = setInterval(() => {
       this.runAnalysis().catch(error => {
@@ -233,7 +241,7 @@ class StrategyService {
     const message = "Trading-Bot gestartet";
     logger.info(message);
     toast.success(message, {
-      description: "Der Bot analysiert nun den Markt gemäß den konfigurierten Strategien."
+      description: "Der Bot analysiert nun den Markt mit Volatilitäts- und Extrem-Stopp-Protokoll."
     });
     
     // Run initial analysis immediately
@@ -271,6 +279,12 @@ class StrategyService {
       clearInterval(this.analysisInterval);
       this.analysisInterval = null;
     }
+    
+    // Stop volatility tracking
+    volatilityService.stopTracking();
+    
+    // Stop extreme stop monitoring
+    extremeStopService.stopMonitoring();
     
     // Disconnect WebSocket
     binanceService.disconnectWebSocket();
@@ -398,18 +412,24 @@ class StrategyService {
     return false;
   }
   
-  // Analyze using RSI + EMA Cross strategy
+  // Analyze using RSI + EMA Cross strategy with volatility filter
   private async analyzeRsiEmaStrategy(
     symbol: string, 
     timeframe: string,
     strategy: StrategySettings
   ): Promise<StrategySignal | null> {
     try {
+      // First check volatility eligibility
+      if (!volatilityService.isVolatilityEligible(symbol)) {
+        logger.debug(`${symbol} does not meet volatility threshold`);
+        return null;
+      }
+      
       // Get OHLCV data from Binance
       const klines = await binanceService.getKlines(symbol, timeframe, 100);
       
       if (!klines || klines.length < strategy.indicators.emaLongPeriod + 10) {
-        logger.log(`Not enough data for ${symbol} on ${timeframe}`);
+        logger.debug(`Not enough data for ${symbol} on ${timeframe}`);
         return null;
       }
       
@@ -427,7 +447,11 @@ class StrategyService {
       const lastIndex = closes.length - 1;
       const prevIndex = lastIndex - 1;
       
-      // Check for signals
+      // Get volatility data for confidence boost
+      const volatilityData = volatilityService.getVolatilityData(symbol);
+      const volatilityBonus = volatilityData ? Math.min(10, volatilityData.volatilityScore) : 0;
+      
+      // Check for signals with enhanced volatility-based conditions
       
       // LONG signal conditions
       const isLongSignal = 
@@ -438,7 +462,9 @@ class StrategyService {
         // Price is above short EMA
         (closes[lastIndex] > emaShort[lastIndex]) &&
         // Volume condition if enabled
-        (!strategy.indicators.useVolume || volumes[lastIndex] > volumes.slice(-6, -1).reduce((a, b) => a + b, 0) / 5 * strategy.indicators.volumeThreshold);
+        (!strategy.indicators.useVolume || volumes[lastIndex] > volumes.slice(-6, -1).reduce((a, b) => a + b, 0) / 5 * strategy.indicators.volumeThreshold) &&
+        // Volatility requirement met
+        volatilityService.isVolatilityEligible(symbol);
       
       // SHORT signal conditions
       const isShortSignal =
@@ -449,18 +475,20 @@ class StrategyService {
         // Price is below short EMA
         (closes[lastIndex] < emaShort[lastIndex]) &&
         // Volume condition if enabled
-        (!strategy.indicators.useVolume || volumes[lastIndex] > volumes.slice(-6, -1).reduce((a, b) => a + b, 0) / 5 * strategy.indicators.volumeThreshold);
+        (!strategy.indicators.useVolume || volumes[lastIndex] > volumes.slice(-6, -1).reduce((a, b) => a + b, 0) / 5 * strategy.indicators.volumeThreshold) &&
+        // Volatility requirement met
+        volatilityService.isVolatilityEligible(symbol);
       
       // If no signal, return null
       if (!isLongSignal && !isShortSignal) {
         return null;
       }
       
-      // Calculate confidence score (0-100)
+      // Calculate confidence score (0-100) with volatility bonus
       let confidence = 50; // Base confidence
       
       if (isLongSignal) {
-        // RSI factor - higher confidence when RSI is more oversold and bouncing
+        // RSI factor
         confidence += (strategy.indicators.rsiOversold - rsi[prevIndex]) / 2;
         // EMA crossover strength
         confidence += (emaShort[lastIndex] - emaLong[lastIndex]) / emaLong[lastIndex] * 1000;
@@ -469,6 +497,8 @@ class StrategyService {
           const volumeRatio = volumes[lastIndex] / (volumes.slice(-6, -1).reduce((a, b) => a + b, 0) / 5);
           confidence += Math.min(15, (volumeRatio - 1) * 10);
         }
+        // Volatility bonus
+        confidence += volatilityBonus;
         
         // Create signal
         const currentPrice = closes[lastIndex];
@@ -489,7 +519,7 @@ class StrategyService {
       }
       
       if (isShortSignal) {
-        // RSI factor - higher confidence when RSI is more overbought and dropping
+        // RSI factor
         confidence += (rsi[prevIndex] - strategy.indicators.rsiOverbought) / 2;
         // EMA crossover strength
         confidence += (emaLong[lastIndex] - emaShort[lastIndex]) / emaLong[lastIndex] * 1000;
@@ -498,6 +528,8 @@ class StrategyService {
           const volumeRatio = volumes[lastIndex] / (volumes.slice(-6, -1).reduce((a, b) => a + b, 0) / 5);
           confidence += Math.min(15, (volumeRatio - 1) * 10);
         }
+        // Volatility bonus
+        confidence += volatilityBonus;
         
         // Create signal
         const currentPrice = closes[lastIndex];
@@ -649,7 +681,7 @@ class StrategyService {
     }
   }
   
-  // For demo/testing: simulate random trade completion
+  // For demo/testing: simulate random trade completion with extreme stop integration
   private simulateTradeCompletion(tradeId: string): void {
     // Random delay between 5 and 15 minutes
     const delay = Math.floor(Math.random() * 10 + 5) * 60 * 1000;
@@ -678,6 +710,9 @@ class StrategyService {
             ? -((trade.entryPrice - trade.stopLoss!) / trade.entryPrice) * (0.8 + Math.random() * 0.2)
             : -((trade.stopLoss! - trade.entryPrice) / trade.entryPrice) * (0.8 + Math.random() * 0.2);
           reason = 'STOP_LOSS';
+          
+          // Record stop loss event for extreme stop monitoring
+          extremeStopService.recordStopLoss(trade.symbol, trade.id);
         }
         
         // Calculate absolute PnL
@@ -703,7 +738,7 @@ class StrategyService {
         toast(
           isPositive ? 'Trade geschlossen mit Gewinn' : 'Trade geschlossen mit Verlust',
           {
-            description: `${trade.symbol}: ${pnl.toFixed(2)} USDT (${(pnlPercentage * 100).toFixed(2)}%)`,
+            description: `${trade.symbol}: ${pnl.toFixed(2)} USDT (${(pnlPercentage * 100).toFixed(2)}%) - Volatilität berücksichtigt`,
             icon: isPositive ? '📈' : '📉'
           }
         );
@@ -797,3 +832,5 @@ class StrategyService {
 
 // Singleton instance
 export const strategyService = new StrategyService();
+
+}
