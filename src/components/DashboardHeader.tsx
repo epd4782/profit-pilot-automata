@@ -1,175 +1,77 @@
-
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { WalletIcon, PlayIcon, SquareIcon, SettingsIcon, TrendingUpIcon, WifiIcon, ArrowLeftIcon } from 'lucide-react';
-import { toast } from "sonner";
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { SettingsModal } from './SettingsModal';
-import { WalletModal } from './WalletModal';
-import { useTradingContext } from '@/contexts/TradingContext';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState } from "react";
+import { useTradingContext } from "@/contexts/TradingContext";
+import { ModeToggle } from "@/components/ModeToggle";
+import { WalletModal } from "@/components/WalletModal";
+import { SettingsModal } from "@/components/SettingsModal";
+import { ClearDataButton } from "@/components/ClearDataButton";
+import { Button } from "@/components/ui/button";
+import { ActivityIcon, WalletIcon } from "lucide-react";
+import { SystemHealthDialog } from "@/components/SystemHealthDialog";
 
 export const DashboardHeader = () => {
-  const { isRunning, toggleBot, isLoading } = useTradingContext();
-  const { logout } = useAuth();
-  const [isTogglingBot, setIsTogglingBot] = useState(false);
-  const [apiStatus, setApiStatus] = useState<'connected' | 'disconnected' | 'error'>('disconnected');
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
-
-  // API status check handled by the useEffect directly in TradingContext
-  // Here we just visualize it based on the context values
-  const apiConfigured = !!localStorage.getItem("binance_api_key") && 
-                         !!localStorage.getItem("binance_secret_key");
-  
-  // Set API status based on configuration
-  if (apiConfigured && apiStatus !== 'connected') {
-    setApiStatus('connected');
-  } else if (!apiConfigured && apiStatus !== 'disconnected') {
-    setApiStatus('disconnected');
-  }
-
-  const handleToggleBot = async () => {
-    setIsTogglingBot(true);
-    try {
-      await toggleBot();
-      toast.success(isRunning ? "Bot gestoppt" : "Bot gestartet", {
-        description: isRunning 
-          ? "Der Trading-Bot wurde erfolgreich gestoppt." 
-          : "Der Trading-Bot wurde erfolgreich gestartet."
-      });
-    } catch (error) {
-      toast.error("Fehler", {
-        description: `Beim ${isRunning ? "Stoppen" : "Starten"} des Bots ist ein Fehler aufgetreten.`
-      });
-    } finally {
-      setIsTogglingBot(false);
-    }
-  };
-
-  const getApiStatusColor = () => {
-    switch (apiStatus) {
-      case 'connected': return 'bg-success-DEFAULT';
-      case 'disconnected': return 'bg-warning-DEFAULT';
-      case 'error': return 'bg-danger-DEFAULT';
-      default: return 'bg-muted-foreground';
-    }
-  };
-
-  const getApiStatusText = () => {
-    switch (apiStatus) {
-      case 'connected': return 'API verbunden';
-      case 'disconnected': return 'API nicht verbunden';
-      case 'error': return 'API Fehler';
-      default: return 'API Status unbekannt';
-    }
-  };
-
-  const handleBackToApiSetup = () => {
-    // Reset API keys and refresh the dashboard
-    localStorage.removeItem("binance_api_key");
-    localStorage.removeItem("binance_secret_key");
-    toast.success("API-Setup", {
-      description: "Sie können nun Ihre API-Zugangsdaten neu eingeben."
-    });
-    // Force refresh the dashboard to show API key form
-    window.location.reload();
-  };
+  const { isRunning, toggleBot } = useTradingContext();
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showHealthDialog, setShowHealthDialog] = useState(false);
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6 pt-4 pb-2">
-        <div className="flex items-center gap-2">
-          <TrendingUpIcon className="h-6 w-6 text-success-DEFAULT" />
-          <h1 className="text-2xl font-bold">ProfitPilot</h1>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+        <div className="text-2xl font-bold">
+          Trading Dashboard
         </div>
-
-        <div className="flex items-center gap-4">
-          {/* API Status Indicator */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-1.5">
-                <div className={`h-2.5 w-2.5 rounded-full ${getApiStatusColor()} ${apiStatus === 'connected' ? 'animate-pulse-slow' : ''}`} />
-                <span className="text-sm font-medium">
-                  {getApiStatusText()}
-                </span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className="flex items-center gap-2">
-                <WifiIcon className="h-4 w-4" />
-                <p>Letzte API-Prüfung: {new Date().toLocaleTimeString()}</p>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-
-          {/* Bot Status Indicator */}
-          <div className="flex items-center gap-1.5">
-            <div className={`h-2.5 w-2.5 rounded-full ${isRunning ? 'bg-success-DEFAULT animate-pulse-slow' : 'bg-danger-DEFAULT'}`} />
-            <span className="text-sm font-medium">
-              {isRunning ? 'Bot aktiv' : 'Bot inaktiv'}
-            </span>
-          </div>
-
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="gap-1.5"
-              onClick={handleBackToApiSetup}
-            >
-              <ArrowLeftIcon className="h-4 w-4" />
-              <span>Back to API Setup</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="gap-1.5"
-              onClick={handleToggleBot}
-              disabled={isTogglingBot || isLoading}
-            >
-              {isRunning ? (
-                <>
-                  <SquareIcon className="h-4 w-4 text-danger-DEFAULT" />
-                  <span>Stop</span>
-                </>
-              ) : (
-                <>
-                  <PlayIcon className="h-4 w-4 text-success-DEFAULT" />
-                  <span>Start</span>
-                </>
-              )}
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="gap-1.5"
-              onClick={() => setIsWalletModalOpen(true)}
-            >
-              <WalletIcon className="h-4 w-4" />
-              <span>Wallet</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setIsSettingsModalOpen(true)}
-            >
-              <SettingsIcon className="h-4 w-4" />
-              <span>Einstellungen</span>
-            </Button>
-          </div>
+        
+        <div className="flex items-center gap-2">
+          <Button onClick={toggleBot} variant={isRunning ? "destructive" : "secondary"}>
+            {isRunning ? "Stop Bot" : "Start Bot"}
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowWalletModal(true)}
+            className="gap-2"
+          >
+            <WalletIcon className="h-4 w-4" />
+            Wallet
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowSettingsModal(true)}
+          >
+            Settings
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowHealthDialog(true)}
+            className="gap-2"
+          >
+            <ActivityIcon className="h-4 w-4" />
+            System-Check
+          </Button>
+          
+          <ClearDataButton />
+          <ModeToggle />
         </div>
       </div>
-      
-      <SettingsModal 
-        isOpen={isSettingsModalOpen}
-        onOpenChange={setIsSettingsModalOpen}
+
+      <WalletModal
+        isOpen={showWalletModal}
+        onOpenChange={setShowWalletModal}
       />
       
-      <WalletModal
-        isOpen={isWalletModalOpen}
-        onOpenChange={setIsWalletModalOpen}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onOpenChange={setShowSettingsModal}
+      />
+      
+      <SystemHealthDialog 
+        isOpen={showHealthDialog}
+        onOpenChange={setShowHealthDialog}
       />
     </>
   );

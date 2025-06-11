@@ -797,5 +797,3 @@ class StrategyService {
 
 // Singleton instance
 export const strategyService = new StrategyService();
-
-}
