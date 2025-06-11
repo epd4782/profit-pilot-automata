@@ -1,5 +1,6 @@
 
 import { toast } from "sonner";
+import CryptoJS from 'crypto-js';
 
 // Types for Binance API responses
 export interface BinanceBalance {
@@ -43,81 +44,213 @@ export interface BinanceOrder {
   time: number;
 }
 
+export interface BinanceAccountInfo {
+  balances: BinanceBalance[];
+  permissions: string[];
+  accountType: string;
+  makerCommission: number;
+  takerCommission: number;
+  buyerCommission: number;
+  sellerCommission: number;
+  canTrade: boolean;
+  canWithdraw: boolean;
+  canDeposit: boolean;
+}
+
 class BinanceService {
   private baseUrl: string;
   private apiKey: string | null;
   private secretKey: string | null;
-  private isTestnet: boolean = true;
+  private isTestnet: boolean = true; // Start with testnet for safety
   private webSocket: WebSocket | null = null;
+  private maxRetries: number = 3;
+  private retryDelay: number = 1000;
 
   constructor() {
-    this.apiKey = localStorage.getItem("binance_api_key");
-    this.secretKey = localStorage.getItem("binance_secret_key");
+    this.apiKey = this.getStoredApiKey();
+    this.secretKey = this.getStoredSecretKey();
     this.baseUrl = this.isTestnet ? 
       "https://testnet.binance.vision/api" : 
-      "https://api.binance.com";
+      "https://api.binance.com/api";
+  }
+
+  private getStoredApiKey(): string | null {
+    try {
+      return localStorage.getItem("binance_api_key");
+    } catch (error) {
+      console.error("Error retrieving API key:", error);
+      return null;
+    }
+  }
+
+  private getStoredSecretKey(): string | null {
+    try {
+      return localStorage.getItem("binance_secret_key");
+    } catch (error) {
+      console.error("Error retrieving secret key:", error);
+      return null;
+    }
   }
 
   public isConfigured(): boolean {
     return !!(this.apiKey && this.secretKey);
   }
 
-  // Helper for signing requests
+  public setTestnet(isTestnet: boolean): void {
+    this.isTestnet = isTestnet;
+    this.baseUrl = isTestnet ? 
+      "https://testnet.binance.vision/api" : 
+      "https://api.binance.com/api";
+  }
+
+  // Generate HMAC SHA256 signature for authenticated requests
   private generateSignature(queryString: string): string {
-    if (!this.secretKey) return "";
+    if (!this.secretKey) {
+      throw new Error("Secret key not available for signature generation");
+    }
     
-    // In a production app, this should use a proper HMAC SHA256 function
-    // For demo purposes, we'll return a mock signature
-    return "mocksignature" + Date.now().toString();
+    return CryptoJS.HmacSHA256(queryString, this.secretKey).toString();
+  }
+
+  // Create query string with timestamp and signature
+  private createSignedQuery(params: Record<string, any> = {}): string {
+    const timestamp = Date.now();
+    const queryParams = {
+      ...params,
+      timestamp: timestamp,
+      recvWindow: 5000
+    };
+    
+    const queryString = Object.keys(queryParams)
+      .map(key => `${key}=${encodeURIComponent(queryParams[key])}`)
+      .join('&');
+    
+    const signature = this.generateSignature(queryString);
+    return `${queryString}&signature=${signature}`;
+  }
+
+  // Make authenticated API request with retry logic
+  private async makeAuthenticatedRequest(
+    endpoint: string, 
+    method: 'GET' | 'POST' | 'DELETE' = 'GET',
+    params: Record<string, any> = {}
+  ): Promise<any> {
+    if (!this.isConfigured()) {
+      throw new Error("API keys are not configured");
+    }
+
+    const signedQuery = this.createSignedQuery(params);
+    const url = `${this.baseUrl}${endpoint}?${signedQuery}`;
+    
+    const headers = {
+      'X-MBX-APIKEY': this.apiKey!,
+      'Content-Type': 'application/json'
+    };
+
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          method,
+          headers,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ msg: 'Unknown error' }));
+          
+          // Handle specific Binance error codes
+          if (response.status === 429) {
+            throw new Error('Rate limit exceeded. Please wait before making more requests.');
+          }
+          
+          if (response.status === 401) {
+            throw new Error('Invalid API credentials. Please check your API keys.');
+          }
+          
+          throw new Error(`API Error ${response.status}: ${errorData.msg || errorData.message || 'Unknown error'}`);
+        }
+
+        return await response.json();
+      } catch (error) {
+        console.error(`API request attempt ${attempt} failed:`, error);
+        
+        if (attempt === this.maxRetries) {
+          throw error;
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, this.retryDelay * attempt));
+      }
+    }
+  }
+
+  // Make public API request (no authentication needed)
+  private async makePublicRequest(endpoint: string, params: Record<string, any> = {}): Promise<any> {
+    const queryString = Object.keys(params)
+      .map(key => `${key}=${encodeURIComponent(params[key])}`)
+      .join('&');
+    
+    const url = `${this.baseUrl}${endpoint}${queryString ? `?${queryString}` : ''}`;
+    
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`Public API Error ${response.status}: ${response.statusText}`);
+        }
+        
+        return await response.json();
+      } catch (error) {
+        console.error(`Public API request attempt ${attempt} failed:`, error);
+        
+        if (attempt === this.maxRetries) {
+          throw error;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, this.retryDelay * attempt));
+      }
+    }
   }
 
   // Get account information including balances
-  public async getAccountInfo() {
+  public async getAccountInfo(): Promise<BinanceAccountInfo> {
     try {
-      if (!this.isConfigured()) {
-        throw new Error("API keys are not configured");
-      }
-
-      console.log("Fetching account info with API key:", this.apiKey?.substring(0, 4) + "...");
+      console.log("Fetching real account info from Binance...");
       
-      // In a real implementation, this would call the Binance API
-      // For demo purposes, we're returning realistic mock data with SPOT wallet data
-      // This would normally be an actual API call to Binance
+      const accountData = await this.makeAuthenticatedRequest('/v3/account');
       
-      // Sample response structure from Binance API /api/v3/account
-      return {
-        balances: [
-          { asset: "USDT", free: "20.78", locked: "0.00" },
-          { asset: "BTC", free: "0.0024", locked: "0.00" },
-          { asset: "ETH", free: "0.0521", locked: "0.00" },
-          { asset: "BNB", free: "0.1482", locked: "0.00" }
-        ],
-        permissions: ["SPOT"], // Explicitly specify SPOT wallet permissions
-        accountType: "SPOT",   // Specify account type as SPOT
-        makerCommission: 10,
-        takerCommission: 10,
-        buyerCommission: 0,
-        sellerCommission: 0,
-        canTrade: true,
-        canWithdraw: true,
-        canDeposit: true,
-      };
+      console.log("Account data received:", {
+        balanceCount: accountData.balances?.length,
+        permissions: accountData.permissions,
+        canTrade: accountData.canTrade
+      });
+      
+      return accountData;
     } catch (error) {
       console.error("Error fetching account info:", error);
-      toast.error("Fehler beim Abrufen der Konto-Informationen");
+      toast.error("Fehler beim Abrufen der Konto-Informationen", {
+        description: error instanceof Error ? error.message : "Unbekannter Fehler"
+      });
       throw error;
     }
   }
 
   // Get current ticker prices for multiple symbols
-  public async getTickers(symbols: string[]) {
+  public async getTickers(symbols: string[] = []): Promise<BinanceTicker[]> {
     try {
-      // In a real implementation, this would call the Binance API
-      return [
-        { symbol: "BTCUSDT", price: "51900.23" },
-        { symbol: "ETHUSDT", price: "2465.78" },
-        { symbol: "BNBUSDT", price: "440.21" }
-      ].filter(ticker => !symbols.length || symbols.includes(ticker.symbol));
+      const endpoint = '/v3/ticker/price';
+      let tickers;
+      
+      if (symbols.length > 0) {
+        // Get specific symbols
+        const symbolsParam = `["${symbols.join('","')}"]`;
+        tickers = await this.makePublicRequest(endpoint, { symbols: symbolsParam });
+      } else {
+        // Get all tickers
+        tickers = await this.makePublicRequest(endpoint);
+      }
+      
+      return Array.isArray(tickers) ? tickers : [tickers];
     } catch (error) {
       console.error("Error fetching tickers:", error);
       throw error;
@@ -125,39 +258,36 @@ class BinanceService {
   }
 
   // Get klines (candlestick data)
-  public async getKlines(symbol: string, interval: string, limit = 100) {
+  public async getKlines(symbol: string, interval: string, limit = 100): Promise<BinanceKline[]> {
     try {
-      // In a real implementation, this would call the Binance API
-      // For demo purposes, returning mock data
-      return Array.from({ length: limit }, (_, i) => {
-        const baseTime = Date.now() - (limit - i) * 60000 * (interval === "1m" ? 1 : interval === "5m" ? 5 : 15);
-        const closePrice = 50000 + Math.random() * 2000;
-        const openPrice = closePrice - Math.random() * 100 + 50;
-        const highPrice = Math.max(openPrice, closePrice) + Math.random() * 50;
-        const lowPrice = Math.min(openPrice, closePrice) - Math.random() * 50;
-        
-        return {
-          openTime: baseTime,
-          open: openPrice.toFixed(2),
-          high: highPrice.toFixed(2),
-          low: lowPrice.toFixed(2),
-          close: closePrice.toFixed(2),
-          volume: (Math.random() * 10 + 1).toFixed(2),
-          closeTime: baseTime + 59999,
-          quoteVolume: (Math.random() * 500000 + 10000).toFixed(2),
-          trades: Math.floor(Math.random() * 100 + 10),
-          buyBaseVolume: (Math.random() * 5 + 0.5).toFixed(2),
-          buyQuoteVolume: (Math.random() * 250000 + 5000).toFixed(2),
-          ignore: "0"
-        };
+      const rawKlines = await this.makePublicRequest('/v3/klines', {
+        symbol,
+        interval,
+        limit
       });
+      
+      // Transform raw kline data to our interface
+      return rawKlines.map((kline: any[]) => ({
+        openTime: kline[0],
+        open: kline[1],
+        high: kline[2],
+        low: kline[3],
+        close: kline[4],
+        volume: kline[5],
+        closeTime: kline[6],
+        quoteVolume: kline[7],
+        trades: kline[8],
+        buyBaseVolume: kline[9],
+        buyQuoteVolume: kline[10],
+        ignore: kline[11]
+      }));
     } catch (error) {
       console.error(`Error fetching klines for ${symbol}:`, error);
       throw error;
     }
   }
 
-  // Place a test order
+  // Place a test order (for testing without real trades)
   public async createTestOrder(
     symbol: string,
     side: 'BUY' | 'SELL',
@@ -165,17 +295,32 @@ class BinanceService {
     quantity: string,
     price?: string,
     stopPrice?: string
-  ) {
+  ): Promise<BinanceOrder> {
     try {
-      if (!this.isConfigured()) {
-        throw new Error("API keys are not configured");
+      const orderParams: any = {
+        symbol,
+        side,
+        type,
+        quantity
+      };
+      
+      if (price && (type === 'LIMIT' || type === 'STOP_LOSS' || type === 'TAKE_PROFIT')) {
+        orderParams.price = price;
+        orderParams.timeInForce = 'GTC';
       }
       
-      // In a real implementation, this would call the Binance API
-      // For demo purposes, returning mock data
+      if (stopPrice && (type === 'STOP_LOSS' || type === 'TAKE_PROFIT')) {
+        orderParams.stopPrice = stopPrice;
+      }
+      
+      console.log("Creating test order:", orderParams);
+      
+      const orderResult = await this.makeAuthenticatedRequest('/v3/order/test', 'POST', orderParams);
+      
+      // Test endpoint returns empty object on success, so we create a mock response
       return {
         symbol,
-        orderId: Math.floor(Math.random() * 1000000),
+        orderId: Date.now(), // Mock order ID
         clientOrderId: `test_${Date.now()}`,
         price: price || "0.00",
         origQty: quantity,
@@ -189,12 +334,14 @@ class BinanceService {
       };
     } catch (error) {
       console.error("Error creating test order:", error);
-      toast.error("Fehler beim Erstellen der Test-Order");
+      toast.error("Fehler beim Erstellen der Test-Order", {
+        description: error instanceof Error ? error.message : "Unbekannter Fehler"
+      });
       throw error;
     }
   }
 
-  // Place a real order
+  // Place a real order (USE WITH CAUTION!)
   public async createOrder(
     symbol: string,
     side: 'BUY' | 'SELL',
@@ -202,81 +349,97 @@ class BinanceService {
     quantity: string,
     price?: string,
     stopPrice?: string
-  ) {
+  ): Promise<BinanceOrder> {
     try {
-      if (!this.isConfigured()) {
-        throw new Error("API keys are not configured");
-      }
-      
-      // In a real implementation, this would call the Binance API
-      // For demo purposes, returning mock data and showing success toast
-      const order = {
+      const orderParams: any = {
         symbol,
-        orderId: Math.floor(Math.random() * 1000000),
-        clientOrderId: `order_${Date.now()}`,
-        price: price || "0.00",
-        origQty: quantity,
-        executedQty: quantity,
-        status: "FILLED",
-        timeInForce: "GTC",
-        type,
         side,
-        stopPrice: stopPrice || "0.00",
-        time: Date.now()
+        type,
+        quantity
       };
       
+      if (price && (type === 'LIMIT' || type === 'STOP_LOSS' || type === 'TAKE_PROFIT')) {
+        orderParams.price = price;
+        orderParams.timeInForce = 'GTC';
+      }
+      
+      if (stopPrice && (type === 'STOP_LOSS' || type === 'TAKE_PROFIT')) {
+        orderParams.stopPrice = stopPrice;
+      }
+      
+      console.log("Creating REAL order:", orderParams);
+      
+      // WARNING: This places a real order with real money!
+      const orderResult = await this.makeAuthenticatedRequest('/v3/order', 'POST', orderParams);
+      
       toast.success(`${side === 'BUY' ? 'Kauf' : 'Verkauf'}-Order erfolgreich platziert`, {
-        description: `${quantity} ${symbol.replace('USDT', '')} für ${price || 'Marktpreis'} USDT`
+        description: `${quantity} ${symbol.replace('USDT', '')} ${price ? `für ${price} USDT` : 'zum Marktpreis'}`
       });
       
-      return order;
+      return orderResult;
     } catch (error) {
       console.error("Error creating order:", error);
-      toast.error("Fehler beim Platzieren der Order");
+      toast.error("Fehler beim Platzieren der Order", {
+        description: error instanceof Error ? error.message : "Unbekannter Fehler"
+      });
       throw error;
     }
   }
 
-  // Connect to WebSocket for real-time price updates
-  public connectWebSocket(symbols: string[], callback: (data: any) => void) {
+  // Connect to WebSocket for real-time price updates with reconnection logic
+  public connectWebSocket(symbols: string[], callback: (data: any) => void): () => void {
     try {
-      // Close existing connection if any
-      if (this.webSocket) {
-        this.webSocket.close();
-      }
+      this.disconnectWebSocket();
       
       const streams = symbols.map(symbol => `${symbol.toLowerCase()}@ticker`).join('/');
       const wsUrl = this.isTestnet 
         ? `wss://testnet.binance.vision/ws/${streams}`
         : `wss://stream.binance.com:9443/ws/${streams}`;
       
-      this.webSocket = new WebSocket(wsUrl);
+      console.log("Connecting to WebSocket:", wsUrl);
       
-      this.webSocket.onopen = () => {
-        console.log('WebSocket connected');
+      const connect = () => {
+        this.webSocket = new WebSocket(wsUrl);
+        
+        this.webSocket.onopen = () => {
+          console.log('WebSocket connected successfully');
+          toast.success("WebSocket verbunden", {
+            description: "Echtzeit-Preisdaten werden empfangen"
+          });
+        };
+        
+        this.webSocket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            callback(data);
+          } catch (err) {
+            console.error('Error parsing WebSocket message:', err);
+          }
+        };
+        
+        this.webSocket.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          toast.error("WebSocket-Verbindungsfehler");
+        };
+        
+        this.webSocket.onclose = (event) => {
+          console.log('WebSocket connection closed', event.code, event.reason);
+          
+          // Attempt to reconnect after 5 seconds if not manually closed
+          if (event.code !== 1000) {
+            setTimeout(() => {
+              console.log('Attempting to reconnect WebSocket...');
+              connect();
+            }, 5000);
+          }
+        };
       };
       
-      this.webSocket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          callback(data);
-        } catch (err) {
-          console.error('Error parsing WebSocket message:', err);
-        }
-      };
-      
-      this.webSocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        toast.error("WebSocket-Verbindungsfehler");
-      };
-      
-      this.webSocket.onclose = () => {
-        console.log('WebSocket connection closed');
-      };
+      connect();
       
       return () => {
         if (this.webSocket) {
-          this.webSocket.close();
+          this.webSocket.close(1000, 'Manual disconnect');
           this.webSocket = null;
         }
       };
@@ -288,10 +451,32 @@ class BinanceService {
   }
   
   // Disconnect WebSocket
-  public disconnectWebSocket() {
+  public disconnectWebSocket(): void {
     if (this.webSocket) {
-      this.webSocket.close();
+      this.webSocket.close(1000, 'Manual disconnect');
       this.webSocket = null;
+    }
+  }
+
+  // Test API connection
+  public async testConnection(): Promise<boolean> {
+    try {
+      await this.makeAuthenticatedRequest('/v3/account');
+      return true;
+    } catch (error) {
+      console.error("API connection test failed:", error);
+      return false;
+    }
+  }
+
+  // Get server time (useful for debugging timestamp issues)
+  public async getServerTime(): Promise<number> {
+    try {
+      const result = await this.makePublicRequest('/v3/time');
+      return result.serverTime;
+    } catch (error) {
+      console.error("Error getting server time:", error);
+      throw error;
     }
   }
 }
