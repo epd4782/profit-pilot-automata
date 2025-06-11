@@ -1,125 +1,109 @@
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogEntry {
-  timestamp: number;
+  timestamp: string;
   level: LogLevel;
   message: string;
   data?: any;
-  source?: string;
 }
 
 class LoggerService {
   private logs: LogEntry[] = [];
-  private maxLogs: number = 1000;
-  private isDevelopment: boolean = true; // Set to false in production
+  private maxLogs = 1000;
+  private logLevel: LogLevel = 'info';
 
   constructor() {
-    // In production, you might want to send logs to a remote service
-    this.isDevelopment = import.meta.env.DEV;
+    // Set log level from config if available
+    try {
+      const { tradingConfig } = require('../config/tradingConfig');
+      this.logLevel = tradingConfig.logging.level;
+      this.maxLogs = tradingConfig.logging.maxLocalLogs;
+    } catch (error) {
+      // Config not available, use defaults
+    }
   }
 
-  private addLog(level: LogLevel, message: string, data?: any, source?: string): void {
-    const logEntry: LogEntry = {
-      timestamp: Date.now(),
+  private shouldLog(level: LogLevel): boolean {
+    const levels: Record<LogLevel, number> = {
+      debug: 0,
+      info: 1,
+      warn: 2,
+      error: 3
+    };
+    return levels[level] >= levels[this.logLevel];
+  }
+
+  private addLog(level: LogLevel, message: string, data?: any) {
+    if (!this.shouldLog(level)) return;
+
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
       level,
       message,
-      data,
-      source
+      data
     };
 
-    this.logs.push(logEntry);
-
-    // Keep only the most recent logs
+    this.logs.push(entry);
+    
+    // Keep only recent logs
     if (this.logs.length > this.maxLogs) {
       this.logs = this.logs.slice(-this.maxLogs);
     }
 
-    // Console output in development
-    if (this.isDevelopment) {
-      const timestamp = new Date().toISOString();
-      const logMessage = `[${timestamp}] ${level.toUpperCase()}: ${message}`;
-      
-      switch (level) {
-        case 'debug':
-          console.debug(logMessage, data);
-          break;
-        case 'info':
-          console.info(logMessage, data);
-          break;
-        case 'warn':
-          console.warn(logMessage, data);
-          break;
-        case 'error':
-          console.error(logMessage, data);
-          break;
-      }
-    }
-
-    // In production, you could send critical logs to a remote service
-    if (!this.isDevelopment && (level === 'error' || level === 'warn')) {
-      this.sendToRemoteLogger(logEntry);
-    }
-  }
-
-  public debug(message: string, data?: any, source?: string): void {
-    this.addLog('debug', message, data, source);
-  }
-
-  public info(message: string, data?: any, source?: string): void {
-    this.addLog('info', message, data, source);
-  }
-
-  public warn(message: string, data?: any, source?: string): void {
-    this.addLog('warn', message, data, source);
-  }
-
-  public error(message: string, data?: any, source?: string): void {
-    this.addLog('error', message, data, source);
-  }
-
-  public getRecentLogs(level?: LogLevel, limit: number = 100): LogEntry[] {
-    let filteredLogs = this.logs;
+    // Console output with timestamp
+    const timestamp = new Date().toISOString();
+    const logMessage = data ? `${timestamp} ${level}: ${message}` : `${timestamp} ${level}: ${message}`;
     
+    switch (level) {
+      case 'debug':
+        console.debug(logMessage, data || '');
+        break;
+      case 'info':
+        console.info(logMessage, data || '');
+        break;
+      case 'warn':
+        console.warn(logMessage, data || '');
+        break;
+      case 'error':
+        console.error(logMessage, data || '');
+        break;
+    }
+  }
+
+  debug(message: string, data?: any) {
+    this.addLog('debug', message, data);
+  }
+
+  info(message: string, data?: any) {
+    this.addLog('info', message, data);
+  }
+
+  warn(message: string, data?: any) {
+    this.addLog('warn', message, data);
+  }
+
+  error(message: string, data?: any) {
+    this.addLog('error', message, data);
+  }
+
+  // Legacy method for compatibility
+  log(level: LogLevel, message: string, data?: any) {
+    this.addLog(level, message, data);
+  }
+
+  getLogs(level?: LogLevel): LogEntry[] {
     if (level) {
-      filteredLogs = this.logs.filter(log => log.level === level);
+      return this.logs.filter(log => log.level === level);
     }
-    
-    return filteredLogs.slice(-limit);
+    return [...this.logs];
   }
 
-  public clearLogs(): void {
+  clearLogs() {
     this.logs = [];
   }
 
-  // Log trading-specific events
-  public logTrade(action: string, symbol: string, data: any): void {
-    this.info(`Trade ${action}: ${symbol}`, data, 'TradeService');
-  }
-
-  public logStrategy(strategyId: string, action: string, data?: any): void {
-    this.info(`Strategy ${strategyId}: ${action}`, data, 'StrategyService');
-  }
-
-  public logApiCall(endpoint: string, method: string, success: boolean, data?: any): void {
-    if (success) {
-      this.debug(`API Call: ${method} ${endpoint}`, data, 'BinanceService');
-    } else {
-      this.error(`API Call Failed: ${method} ${endpoint}`, data, 'BinanceService');
-    }
-  }
-
-  // Send critical logs to remote service (implement based on your needs)
-  private async sendToRemoteLogger(logEntry: LogEntry): Promise<void> {
-    try {
-      // Example: Send to a logging service like LogRocket, Sentry, or custom endpoint
-      // await fetch('/api/logs', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(logEntry)
-      // });
-    } catch (error) {
-      console.error('Failed to send log to remote service:', error);
-    }
+  exportLogs(): string {
+    return JSON.stringify(this.logs, null, 2);
   }
 }
 
