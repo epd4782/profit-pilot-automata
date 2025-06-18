@@ -1,5 +1,10 @@
 
 {
-  "build": "npm run build",
-  "start": "npm run start"
+  "build": {
+    "env": {},
+    "commands": ["npm install", "npm run build"]
+  },
+  "start": {
+    "cmd": "npx serve dist"
+  }
 }
