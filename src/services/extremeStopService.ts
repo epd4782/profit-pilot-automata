@@ -165,7 +165,7 @@ class ExtremeStopService {
   
   // Trigger extreme stop protocol
   private triggerExtremeStop(reason: 'PORTFOLIO_LOSS' | 'STOP_LOSS_LIMIT', details: any): void {
-    logger.log(`EXTREME STOP TRIGGERED: ${reason}`, details);
+    logger.error(`EXTREME STOP TRIGGERED: ${reason}`, details);
     
     // Stop the trading bot
     if (strategyService.isActive()) {

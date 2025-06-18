@@ -399,13 +399,13 @@ class StrategyService {
     const initialBalance = 100; // Initial balance (should match tradeService)
     
     if (dailyPerformance && Math.abs(dailyPerformance.profit) > (initialBalance * maxDailyLoss / 100)) {
-      logger.log("Daily loss limit reached", { profit: dailyPerformance.profit.toFixed(2) });
+      logger.info("Daily loss limit reached", { profit: dailyPerformance.profit.toFixed(2) });
       return true;
     }
     
     // Check max trades per day
     if (dailyPerformance && dailyPerformance.trades >= maxTradesPerDay) {
-      logger.log("Max trades per day reached", { trades: dailyPerformance.trades, max: maxTradesPerDay });
+      logger.info("Max trades per day reached", { trades: dailyPerformance.trades, max: maxTradesPerDay });
       return true;
     }
     
