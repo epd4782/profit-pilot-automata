@@ -1,3 +1,4 @@
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 interface LogEntry {
@@ -89,6 +90,15 @@ class LoggerService {
   // Legacy method for compatibility
   log(level: LogLevel, message: string, data?: any) {
     this.addLog(level, message, data);
+  }
+
+  // Additional methods needed by other services
+  logStrategy(strategyId: string, message: string, data?: any) {
+    this.info(`[Strategy ${strategyId}] ${message}`, data);
+  }
+
+  logTrade(action: string, symbol: string, data?: any) {
+    this.info(`[Trade ${action}] ${symbol}`, data);
   }
 
   getLogs(level?: LogLevel): LogEntry[] {
