@@ -2,9 +2,13 @@
 {
   "build": {
     "env": {},
-    "commands": ["npm install", "npm run build"]
+    "commands": [
+      "npm install",
+      "npm run build",
+      "cd server && npm install --only=production"
+    ]
   },
   "start": {
-    "cmd": "npx serve dist"
+    "cmd": "node server/index.js"
   }
 }
