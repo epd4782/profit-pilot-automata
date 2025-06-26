@@ -10,5 +10,9 @@
   },
   "start": {
     "cmd": "node server/index.js"
+  },
+  "healthcheck": {
+    "path": "/api/health",
+    "timeout": 300
   }
 }

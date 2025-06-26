@@ -1,8 +1,6 @@
-
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -10,6 +8,8 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from dist directory
 app.use(express.static(path.join(__dirname, '../dist')));
 
 // In-memory storage (replace with database in production)
@@ -228,8 +228,13 @@ app.get('/api/portfolio', (req, res) => {
   }
 });
 
-// Serve React app for all other routes
+// Serve React app for all non-API routes (SPA routing)
 app.get('*', (req, res) => {
+  // Don't serve index.html for API routes
+  if (req.path.startsWith('/api/')) {
+    res.status(404).json({ error: 'API endpoint not found' });
+    return;
+  }
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
@@ -241,9 +246,9 @@ app.use((error, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Trading Bot Server running on port ${PORT}`);
-  console.log(`API endpoints available at http://localhost:${PORT}/api/`);
-  console.log(`Frontend available at http://localhost:${PORT}`);
+  console.log(`🚀 Trading Bot Server running on port ${PORT}`);
+  console.log(`📡 API endpoints available at http://localhost:${PORT}/api/`);
+  console.log(`🌐 Frontend available at http://localhost:${PORT}`);
 });
 
 module.exports = app;

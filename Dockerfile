@@ -1,27 +1,20 @@
 
 # Multi-stage build for production
-FROM node:18-alpine AS frontend-builder
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy frontend package files
+# Copy and install frontend dependencies
 COPY package*.json ./
 RUN npm ci
 
-# Copy frontend source code
+# Copy frontend source and build
 COPY . .
-
-# Build the frontend application
 RUN npm run build
 
-# Backend stage
-FROM node:18-alpine AS backend-builder
-
-WORKDIR /app/server
-
-# Copy server package files
-COPY server/package*.json ./
-RUN npm ci --only=production
+# Copy and install server dependencies
+COPY server/package*.json ./server/
+RUN cd server && npm ci --only=production
 
 # Production stage
 FROM node:18-alpine AS production
@@ -32,10 +25,12 @@ WORKDIR /app
 RUN apk add --no-cache curl
 
 # Copy built frontend assets
-COPY --from=frontend-builder /app/dist ./dist
+COPY --from=builder /app/dist ./dist
 
 # Copy server code and dependencies
-COPY --from=backend-builder /app/server/node_modules ./server/node_modules
+COPY --from=builder /app/server ./server
+
+# Copy server source files
 COPY server/ ./server/
 
 # Health check
