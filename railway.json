@@ -5,7 +5,7 @@
     "commands": [
       "npm install",
       "npm run build",
-      "cd server && npm install --only=production"
+      "cd server && npm ci --omit=dev"
     ]
   },
   "start": {
