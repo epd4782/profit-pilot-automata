@@ -14,7 +14,7 @@ RUN npm run build
 
 # Copy and install server dependencies
 COPY server/package*.json ./server/
-RUN cd server && npm ci --omit=dev
+RUN cd server && npm install --omit=dev
 
 # Production stage
 FROM node:18-alpine AS production

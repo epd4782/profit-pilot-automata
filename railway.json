@@ -5,7 +5,7 @@
     "commands": [
       "npm install",
       "npm run build",
-      "cd server && npm ci --omit=dev"
+      "cd server && npm install --omit=dev"
     ]
   },
   "start": {

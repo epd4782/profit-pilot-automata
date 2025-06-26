@@ -12,7 +12,7 @@ npm run build
 
 # Install server dependencies
 echo "📡 Installing server dependencies..."
-cd server && npm ci --omit=dev && cd ..
+cd server && npm install --omit=dev && cd ..
 
 echo "🚀 Starting production server..."
 node server/index.js
